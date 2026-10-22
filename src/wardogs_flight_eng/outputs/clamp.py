@@ -5,10 +5,13 @@ Each command is clamped on its own; same-axis commands are never summed here
 """
 
 import logging
+import math
 from collections.abc import Sequence
 from dataclasses import replace
+from typing import assert_never
 
 from wardogs_flight_eng.engine.commands import (
+    AllOffCommand,
     Command,
     PulseCommand,
     SineCommand,
@@ -26,14 +29,19 @@ class ClampedBackend:
     ``ceiling`` is the normalised fraction (0, 1] of the base's peak torque
     the user allows. Spring coefficients and sine/transient magnitudes are
     held to ``[0, ceiling]``; pulse magnitudes to ``[-ceiling, ceiling]`` so
-    the push direction survives.
+    the push direction survives. A non-finite value (NaN or +/-inf) fails
+    closed: it is replaced by 0.0, never passed through and never raised.
     """
 
     def __init__(self, inner: ForceBackend, ceiling: float) -> None:
         if not 0.0 < ceiling <= 1.0:
             raise ValueError(f"ceiling must be in (0, 1], got {ceiling!r}")
         self._inner = inner
-        self.ceiling = ceiling
+        self._ceiling = ceiling
+
+    @property
+    def ceiling(self) -> float:
+        return self._ceiling
 
     def apply(self, t: float, commands: Sequence[Command]) -> None:
         self._inner.apply(t, [self._clamp(command) for command in commands])
@@ -46,21 +54,39 @@ class ClampedBackend:
 
     def _clamp(self, command: Command) -> Command:
         match command:
-            case SpringCommand(coefficient=value):
-                limited = self._limit(value)
-                clamped: Command = replace(command, coefficient=limited)
-            case SineCommand(magnitude=value) | TransientCommand(magnitude=value):
-                limited = self._limit(value)
-                clamped = replace(command, magnitude=limited)
-            case PulseCommand(magnitude=value):
-                limited = min(max(value, -self.ceiling), self.ceiling)
-                clamped = replace(command, magnitude=limited)
-            case _:
+            case AllOffCommand():
                 return command
-        if limited == value:
-            return command
-        logger.debug("clamped %s %.3f -> %.3f", type(command).__name__, value, limited)
-        return clamped
+            case SpringCommand(coefficient=value):
+                limited = self._limit(value, 0.0)
+                if self._unchanged(command, value, limited):
+                    return command
+                return replace(command, coefficient=limited)
+            case SineCommand(magnitude=value) | TransientCommand(magnitude=value):
+                limited = self._limit(value, 0.0)
+                if self._unchanged(command, value, limited):
+                    return command
+                return replace(command, magnitude=limited)
+            case PulseCommand(magnitude=value):
+                limited = self._limit(value, -self._ceiling)
+                if self._unchanged(command, value, limited):
+                    return command
+                return replace(command, magnitude=limited)
+            case _:
+                assert_never(command)
 
-    def _limit(self, value: float) -> float:
-        return min(max(value, 0.0), self.ceiling)
+    def _limit(self, value: float, floor: float) -> float:
+        if not math.isfinite(value):
+            return 0.0
+        return min(max(value, floor), self._ceiling)
+
+    @staticmethod
+    def _unchanged(command: Command, value: float, limited: float) -> bool:
+        """Return True when no clamp was needed; otherwise warn once."""
+        if limited == value:
+            return True
+        name = type(command).__name__
+        if math.isfinite(value):
+            logger.warning("clamped %s %.3f -> %.3f", name, value, limited)
+        else:
+            logger.warning("non-finite value in %s replaced by %.1f", name, limited)
+        return False

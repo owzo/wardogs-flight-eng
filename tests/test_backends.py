@@ -1,6 +1,7 @@
 """Output backends: clamp ceiling, JSONL force log and the null backend."""
 
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -169,13 +170,17 @@ def test_logging_backend_close_is_idempotent_and_flushes(tmp_path: Path) -> None
     assert p.read_text().endswith("\n")
 
 
-def test_logging_backend_ignores_calls_after_close(tmp_path: Path) -> None:
+def test_logging_backend_warns_and_ignores_calls_after_close(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     p = tmp_path / "forces.jsonl"
     b = LoggingBackend(p)
     b.close()
-    b.apply(0.0, [SineCommand(Axis.PITCH, 5.0, 0.1)])
-    b.all_off()
+    with caplog.at_level(logging.WARNING):
+        b.apply(0.0, [SineCommand(Axis.PITCH, 5.0, 0.1)])
+        b.all_off()
     assert p.read_text() == ""
+    assert [r.levelno for r in caplog.records] == [logging.WARNING, logging.WARNING]
 
 
 def test_logging_backend_creates_parent_directory(tmp_path: Path) -> None:

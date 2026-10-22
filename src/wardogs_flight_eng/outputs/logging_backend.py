@@ -56,7 +56,7 @@ class LoggingBackend:
 
     def apply(self, t: float, commands: Sequence[Command]) -> None:
         if self._file.closed:
-            logger.debug("apply ignored: force log already closed")
+            logger.warning("apply ignored: force log already closed")
             return
         self._last_t = t
         for command in commands:
@@ -64,7 +64,7 @@ class LoggingBackend:
 
     def all_off(self) -> None:
         if self._file.closed:
-            logger.debug("all_off ignored: force log already closed")
+            logger.warning("all_off ignored: force log already closed")
             return
         self._write({"t": self._last_t, "kind": "all_off"})
 
