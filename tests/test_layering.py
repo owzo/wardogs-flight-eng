@@ -72,9 +72,7 @@ def test_pure_packages_import_nothing_impure() -> None:
 
 def test_detector_flags_forbidden_imports() -> None:
     source = "import sdl2\nfrom wardogs_flight_eng.inputs import x\nimport os\n"
-    found = {
-        m for m in _absolute_imports(source) if _violates(m, FORBIDDEN["engine"])
-    }
+    found = {m for m in _absolute_imports(source) if _violates(m, FORBIDDEN["engine"])}
     assert found == {"sdl2", "wardogs_flight_eng.inputs", "wardogs_flight_eng.inputs.x"}
 
 

@@ -59,6 +59,4 @@ class AllOffCommand:
     """Stop every active effect."""
 
 
-Command = (
-    SpringCommand | SineCommand | PulseCommand | TransientCommand | AllOffCommand
-)
+Command = SpringCommand | SineCommand | PulseCommand | TransientCommand | AllOffCommand
