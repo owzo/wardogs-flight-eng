@@ -196,3 +196,20 @@ def test_engine_rejects_profile_unknown_to_constants() -> None:
     p = load_profile(PROFILES / "lakota.json").model_copy(update={"airframe": "x"})
     with pytest.raises(ProfileError, match="'x'"):
         FlightEngine(p, load_constants())
+
+
+def test_profile_and_all_off_setter_for_profile_handoff() -> None:
+    e = engine_for("lakota")
+    assert e.profile.name == "lakota"
+    e.all_off = True
+    assert e.step(0.01, frame()) == [AllOffCommand()]
+    e.all_off = False
+    assert e.step(0.01, frame()) != [AllOffCommand()]
+
+
+def test_primed_buttons_are_not_taps() -> None:
+    e = engine_for("lakota")
+    e.all_off = True
+    e.prime_buttons(frozenset({Button.ALL_OFF}))
+    assert e.step(0.01, frame(0, 0, 0, 0, Button.ALL_OFF)) == [AllOffCommand()]
+    assert e.all_off is True  # held across the handoff: no toggle

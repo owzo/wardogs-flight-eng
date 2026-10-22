@@ -78,9 +78,27 @@ class FlightEngine:
         self._all_off = False
 
     @property
+    def profile(self) -> Profile:
+        """The profile this engine was built for."""
+        return self._profile
+
+    @property
     def all_off(self) -> bool:
         """``True`` while the ALL_OFF latch holds every force off."""
         return self._all_off
+
+    @all_off.setter
+    def all_off(self, value: bool) -> None:
+        """Set the latch, e.g. carried over from the engine handing off control."""
+        self._all_off = value
+
+    def prime_buttons(self, held: frozenset[Button]) -> None:
+        """Treat ``held`` as last tick's buttons, so still-held ones are not taps.
+
+        Used when this engine takes over mid-flight: without it a button held
+        across a profile switch (ALL_OFF above all) would read as a fresh tap.
+        """
+        self._previous_held = held
 
     def step(self, dt: float, frame: ControlFrame) -> list[Command]:
         """Advance ``dt`` seconds and return this tick's commands.
