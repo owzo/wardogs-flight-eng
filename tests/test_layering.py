@@ -17,6 +17,8 @@ FORBIDDEN = {
         "wardogs_flight_eng.engine",
         "wardogs_flight_eng.inputs",
         "wardogs_flight_eng.outputs",
+        "wardogs_flight_eng.runtime",
+        "wardogs_flight_eng.cli",
         "sdl2",
     },
 }
@@ -55,6 +57,7 @@ def _violates(module: str, prefixes: set[str]) -> bool:
 def test_pure_packages_import_nothing_impure() -> None:
     violations: list[str] = []
     for package, prefixes in FORBIDDEN.items():
+        assert (PACKAGE_ROOT / package).is_dir(), f"missing package {package}"
         for path in sorted((PACKAGE_ROOT / package).rglob("*.py")):
             source = path.read_text(encoding="utf-8")
             rel = path.relative_to(PACKAGE_ROOT).parent.as_posix().replace("/", ".")
@@ -80,3 +83,11 @@ def test_detector_resolves_relative_imports() -> None:
     found = _absolute_imports(source, "wardogs_flight_eng.engine")
     assert "wardogs_flight_eng.inputs" in found
     assert "wardogs_flight_eng.engine.sibling" in found
+
+
+def test_constants_forbids_runtime_and_cli() -> None:
+    source = "import wardogs_flight_eng.runtime\nfrom wardogs_flight_eng import cli\n"
+    found = {
+        m for m in _absolute_imports(source) if _violates(m, FORBIDDEN["constants"])
+    }
+    assert found == {"wardogs_flight_eng.runtime", "wardogs_flight_eng.cli"}
