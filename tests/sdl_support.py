@@ -55,6 +55,7 @@ class FakeSdl:
     SDL_HAPTIC_SINE = 1 << 1
     SDL_HAPTIC_SPRING = 1 << 7
     SDL_HAPTIC_CARTESIAN = 1
+    SDL_IGNORE = 0
 
     def __init__(self, *joysticks: FakeJoystick, supported: int | None = None) -> None:
         self.joysticks = list(joysticks)
@@ -87,6 +88,10 @@ class FakeSdl:
     def SDL_Init(self, flags: int) -> int:
         self.calls.append(("SDL_Init", (flags,)))
         return self.init_result
+
+    def SDL_JoystickEventState(self, state: int) -> int:
+        self.calls.append(("SDL_JoystickEventState", (state,)))
+        return state
 
     def SDL_GetError(self) -> str:
         return "fake SDL error"

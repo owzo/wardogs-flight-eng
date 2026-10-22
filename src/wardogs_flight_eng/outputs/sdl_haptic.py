@@ -2,7 +2,7 @@
 
 import logging
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import partial
 from typing import assert_never
@@ -16,10 +16,15 @@ from wardogs_flight_eng.engine.commands import (
     SpringCommand,
     TransientCommand,
 )
-from wardogs_flight_eng.inputs.protocol import DeviceLostError
-from wardogs_flight_eng.inputs.sdl_api import HapticEffect, SdlError
+from wardogs_flight_eng.inputs.sdl_api import HapticEffect
 from wardogs_flight_eng.inputs.sdl_device import SdlDevice
-from wardogs_flight_eng.outputs.sdl_channel import EffectPool, HapticChannel
+from wardogs_flight_eng.outputs.haptic_axes import HapticAxisMap
+from wardogs_flight_eng.outputs.sdl_channel import (
+    EffectPool,
+    HapticChannel,
+    HapticFailure,
+    attempt,
+)
 from wardogs_flight_eng.outputs.sdl_effects import (
     advance_phase,
     milliseconds,
@@ -55,6 +60,11 @@ class _SineClock:
 class SdlHapticBackend:
     """``ForceBackend`` driving the haptic side of an opened ``SdlDevice``.
 
+    Commands arrive in frame space -- the stick as the engine sees it, already
+    inverted by the input bindings. ``axis_map`` (built from those bindings,
+    required) undoes that: it picks each axis's haptic index and flips the
+    spring centre and pulse level of an inverted axis.
+
     Springs and sines are persistent: one effect per axis, created on first
     use, then updated in place and re-run every tick (never recreated). Their
     length is finite -- ``persistent_length_s`` (the CLI passes 2 x the
@@ -68,12 +78,19 @@ class SdlHapticBackend:
     device raises ``DeviceLostError``; any other SDL failure ``SdlError``.
     """
 
-    def __init__(self, device: SdlDevice, persistent_length_s: float = 1.0) -> None:
+    def __init__(
+        self,
+        device: SdlDevice,
+        persistent_length_s: float = 1.0,
+        *,
+        axis_map: HapticAxisMap,
+    ) -> None:
         if not (math.isfinite(persistent_length_s) and persistent_length_s > 0):
             raise ValueError(
                 f"persistent_length_s must be positive, got {persistent_length_s!r}"
             )
         self._api = device.api
+        self._axes = axis_map
         self._channel = HapticChannel(device.api, device.joystick)
         self._length_ms = milliseconds(persistent_length_s)
         self._held: dict[tuple[str, Axis], _Held] = {}
@@ -97,11 +114,11 @@ class SdlHapticBackend:
         """
         if self._closed:
             return
-        failures: list[DeviceLostError | SdlError] = []
-        _attempt(failures, self._channel.stop_all)
+        failures: list[HapticFailure] = []
+        attempt(failures, self._channel.stop_all)
         for held in self._held.values():
             held.effect = silenced(held.effect)
-            _attempt(
+            attempt(
                 failures, partial(self._channel.update, held.effect_id, held.effect)
             )
         if failures:
@@ -124,13 +141,14 @@ class SdlHapticBackend:
             case AllOffCommand():
                 self.all_off()
             case SpringCommand():
-                effect = spring_effect(self._api, command, self._length_ms)
+                effect = spring_effect(self._api, self._axes, command, self._length_ms)
                 self._hold("spring", command.axis, effect)
             case SineCommand():
                 self._hold("sine", command.axis, self._sine(t, command))
             case PulseCommand():
                 pool = self._pool("pulse", command.axis)
-                pool.play(t, pulse_effect(self._api, command), command.duration_s)
+                effect = pulse_effect(self._api, self._axes, command)
+                pool.play(t, effect, command.duration_s)
             case TransientCommand():
                 self._transient(t, command)
             case _:
@@ -157,6 +175,7 @@ class SdlHapticBackend:
             clock.period = period
         return sine_effect(
             self._api,
+            self._axes,
             command.axis,
             period=clock.period,
             magnitude=command.magnitude if period is not None else 0.0,
@@ -169,7 +188,7 @@ class SdlHapticBackend:
         if period is None:
             log.debug("transient on %s with no frequency skipped", command.axis)
             return
-        effect = transient_effect(self._api, command, period)
+        effect = transient_effect(self._api, self._axes, command, period)
         self._pool("transient", command.axis).play(t, effect, command.duration_s)
 
     def _pool(self, kind: str, axis: Axis) -> EffectPool:
@@ -178,12 +197,3 @@ class SdlHapticBackend:
     def _effect_ids(self) -> list[int]:
         held = [entry.effect_id for entry in self._held.values()]
         return held + [i for pool in self._pools.values() for i in pool.effect_ids]
-
-
-def _attempt(
-    failures: list[DeviceLostError | SdlError], call: Callable[[], None]
-) -> None:
-    try:
-        call()
-    except (DeviceLostError, SdlError) as err:
-        failures.append(err)

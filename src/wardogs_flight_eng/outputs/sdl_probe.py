@@ -1,7 +1,9 @@
 """Primitive probe for ``check-device``: can this base play what we need?
 
 Effects are created (and the spring's centre moved) but never run, so the
-probe produces no force. A detached device raises ``DeviceLostError``.
+probe produces no force; their axis placement is therefore irrelevant and a
+fixed map (roll on haptic axis 0, pitch on 1) is used. A detached device
+raises ``DeviceLostError``.
 """
 
 import logging
@@ -10,6 +12,7 @@ from dataclasses import dataclass
 from wardogs_flight_eng.engine.commands import Axis, PulseCommand, SpringCommand
 from wardogs_flight_eng.inputs.sdl_api import HapticEffect, SdlApi, SdlError
 from wardogs_flight_eng.inputs.sdl_device import open_by_guid
+from wardogs_flight_eng.outputs.haptic_axes import HapticAxis, HapticAxisMap
 from wardogs_flight_eng.outputs.sdl_channel import HapticChannel
 from wardogs_flight_eng.outputs.sdl_effects import (
     pulse_effect,
@@ -21,11 +24,17 @@ log = logging.getLogger(__name__)
 
 _PROBE_LENGTH_MS = 1000
 _PROBE_PERIOD_MS = 100
+_PROBE_AXES = HapticAxisMap(pitch=HapticAxis(1, 1.0), roll=HapticAxis(0, 1.0))
 
 
 @dataclass(frozen=True, slots=True)
 class PrimitiveReport:
-    """Which effect primitives the device accepted."""
+    """Which effect primitives the device accepted.
+
+    ``spring_center_moves`` means SDL accepted an update moving the spring's
+    centre to 0.5; it is not a measured movement of the stick (the hardware
+    conformance test measures that).
+    """
 
     spring: bool
     spring_center_moves: bool
@@ -67,13 +76,16 @@ def _probe(channel: HapticChannel, api: SdlApi) -> PrimitiveReport:
         sine = attempt(
             sine_effect(
                 api,
+                _PROBE_AXES,
                 Axis.PITCH,
                 period=_PROBE_PERIOD_MS,
                 magnitude=0.0,
                 length_ms=_PROBE_LENGTH_MS,
             )
         )
-        constant = attempt(pulse_effect(api, PulseCommand(Axis.PITCH, 0.0, 0.1)))
+        constant = attempt(
+            pulse_effect(api, _PROBE_AXES, PulseCommand(Axis.PITCH, 0.0, 0.1))
+        )
         return PrimitiveReport(
             spring is not None, moves, sine is not None, constant is not None
         )
@@ -84,7 +96,7 @@ def _probe(channel: HapticChannel, api: SdlApi) -> PrimitiveReport:
 
 def _spring(api: SdlApi, center: float) -> HapticEffect:
     command = SpringCommand(Axis.PITCH, center, 0.3, 0.0)
-    return spring_effect(api, command, _PROBE_LENGTH_MS)
+    return spring_effect(api, _PROBE_AXES, command, _PROBE_LENGTH_MS)
 
 
 def _moves(channel: HapticChannel, effect_id: int, moved: HapticEffect) -> bool:

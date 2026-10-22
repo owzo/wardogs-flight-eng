@@ -3,16 +3,26 @@
 from sdl_support import GUID_STICK, FakeSdl
 
 from wardogs_flight_eng.engine.commands import Axis, Command, SineCommand, SpringCommand
+from wardogs_flight_eng.engine.device_map import AxisBinding
 from wardogs_flight_eng.inputs.sdl_api import HapticEffect
 from wardogs_flight_eng.inputs.sdl_device import open_by_guid
+from wardogs_flight_eng.outputs.haptic_axes import HapticAxisMap
 from wardogs_flight_eng.outputs.sdl_haptic import SdlHapticBackend
 
 PITCH_ONLY = (0, 1, 0)
 
+STANDARD_AXES = HapticAxisMap.from_bindings(
+    pitch=AxisBinding(device="stick", axis=1), roll=AxisBinding(device="stick", axis=0)
+)
 
-def open_backend(fake: FakeSdl, length_s: float = 1.0) -> SdlHapticBackend:
+
+def open_backend(
+    fake: FakeSdl, length_s: float = 1.0, axis_map: HapticAxisMap = STANDARD_AXES
+) -> SdlHapticBackend:
     return SdlHapticBackend(
-        open_by_guid(GUID_STICK, fake), persistent_length_s=length_s
+        open_by_guid(GUID_STICK, fake),
+        persistent_length_s=length_s,
+        axis_map=axis_map,
     )
 
 

@@ -4,6 +4,7 @@ Every failing call is classified: ``DeviceLostError`` when the joystick is no
 longer attached, otherwise ``SdlError`` carrying ``SDL_GetError()``.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import NoReturn
 
@@ -11,6 +12,16 @@ from wardogs_flight_eng.inputs.protocol import DeviceLostError
 from wardogs_flight_eng.inputs.sdl_api import HapticEffect, SdlApi, SdlError
 
 POOL_SIZE = 4
+
+HapticFailure = DeviceLostError | SdlError
+
+
+def attempt(failures: list[HapticFailure], call: Callable[[], None]) -> None:
+    """Run ``call``; record a haptic failure instead of raising it."""
+    try:
+        call()
+    except (DeviceLostError, SdlError) as err:
+        failures.append(err)
 
 
 class HapticChannel:

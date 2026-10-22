@@ -39,12 +39,9 @@ class DeviceInfo:
     has_haptic: bool
 
 
-def _started(api: SdlApi | None) -> SdlApi:
-    """Resolve the api and initialise SDL's joystick and haptic subsystems."""
-    resolved = default_api() if api is None else api
-    if resolved.SDL_Init(resolved.SDL_INIT_JOYSTICK | resolved.SDL_INIT_HAPTIC) < 0:
-        raise SdlError(f"SDL_Init failed: {resolved.SDL_GetError()}")
-    return resolved
+def _resolved(api: SdlApi | None) -> SdlApi:
+    """``api``, or the real adapter (which initialises SDL once on first use)."""
+    return default_api() if api is None else api
 
 
 def _describe(api: SdlApi, index: int, joystick: object) -> DeviceInfo:
@@ -67,7 +64,7 @@ def _open(api: SdlApi, index: int) -> object | None:
 
 def enumerate_devices(api: SdlApi | None = None) -> list[DeviceInfo]:
     """Describe every attached joystick; each is opened and released again."""
-    sdl = _started(api)
+    sdl = _resolved(api)
     devices: list[DeviceInfo] = []
     for index in range(sdl.SDL_NumJoysticks()):
         joystick = _open(sdl, index)
@@ -82,7 +79,7 @@ def enumerate_devices(api: SdlApi | None = None) -> list[DeviceInfo]:
 
 def open_by_guid(guid: str, api: SdlApi | None = None) -> "SdlDevice":
     """Open the first joystick whose GUID is ``guid``; others are released."""
-    sdl = _started(api)
+    sdl = _resolved(api)
     wanted = guid.lower()
     for index in range(sdl.SDL_NumJoysticks()):
         joystick = _open(sdl, index)

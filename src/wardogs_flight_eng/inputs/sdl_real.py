@@ -2,6 +2,7 @@
 
 ``sdl2`` (and its DLL) is imported only when ``default_api()`` is first
 called, never at module import, so tests and the pure layers stay free of it.
+That first call also initialises SDL, once per process (``initialise``).
 pysdl2 ships no type stubs: the module is handled as ``Any`` here and nowhere
 else.
 """
@@ -9,20 +10,42 @@ else.
 import ctypes
 import importlib
 from dataclasses import fields
-from functools import cache
 from typing import Any
 
-from wardogs_flight_eng.inputs.sdl_api import HapticDirection, HapticEffect, SdlApi
+from wardogs_flight_eng.inputs.sdl_api import (
+    HapticDirection,
+    HapticEffect,
+    SdlApi,
+    SdlError,
+)
 
 _GUID_BUFFER = 33  # 32 hex digits + NUL
 
+_shared: SdlApi | None = None  # set once SDL has been initialised
 
-@cache
+
+def initialise(api: SdlApi) -> None:
+    """Start the joystick and haptic subsystems; stop joystick events.
+
+    Nothing pumps SDL's event queue (state is read with
+    ``SDL_JoystickUpdate``), so joystick events are ignored rather than left
+    to fill the queue.
+    """
+    if api.SDL_Init(api.SDL_INIT_JOYSTICK | api.SDL_INIT_HAPTIC) < 0:
+        raise SdlError(f"SDL_Init failed: {api.SDL_GetError()}")
+    api.SDL_JoystickEventState(api.SDL_IGNORE)
+
+
 def default_api() -> SdlApi:
-    """Import ``sdl2`` and return the shared adapter over it."""
-    sdl2: Any = importlib.import_module("sdl2")
-    sdl2.SDL_SetHint(b"SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", b"1")
-    return RealSdl(sdl2)
+    """Import ``sdl2``, initialise SDL on the first call, return the adapter."""
+    global _shared
+    if _shared is None:
+        sdl2: Any = importlib.import_module("sdl2")
+        sdl2.SDL_SetHint(b"SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", b"1")
+        api = RealSdl(sdl2)
+        initialise(api)
+        _shared = api
+    return _shared
 
 
 def _member(sdl: Any, effect_type: int) -> str:
@@ -77,9 +100,13 @@ class RealSdl:
         self.SDL_HAPTIC_SINE: int = sdl.SDL_HAPTIC_SINE
         self.SDL_HAPTIC_SPRING: int = sdl.SDL_HAPTIC_SPRING
         self.SDL_HAPTIC_CARTESIAN: int = sdl.SDL_HAPTIC_CARTESIAN
+        self.SDL_IGNORE: int = sdl.SDL_IGNORE
 
     def SDL_Init(self, flags: int) -> int:
         return int(self._sdl.SDL_Init(flags))
+
+    def SDL_JoystickEventState(self, state: int) -> int:
+        return int(self._sdl.SDL_JoystickEventState(state))
 
     def SDL_GetError(self) -> str:
         return _text(self._sdl.SDL_GetError())

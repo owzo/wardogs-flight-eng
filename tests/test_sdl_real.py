@@ -10,6 +10,7 @@ from dataclasses import fields
 from types import ModuleType
 
 import pytest
+from sdl_haptic_support import STANDARD_AXES
 
 from wardogs_flight_eng.engine.commands import Axis, PulseCommand, SpringCommand
 from wardogs_flight_eng.inputs.sdl_api import (
@@ -48,7 +49,9 @@ def test_mirror_fields_exist_in_pysdl2_structs(sdl2: ModuleType) -> None:
 
 def test_spring_converts_to_condition_struct(sdl2: ModuleType) -> None:
     api = RealSdl(sdl2)
-    mirror = spring_effect(api, SpringCommand(Axis.PITCH, 0.25, 0.35, 0.02), 1000)
+    mirror = spring_effect(
+        api, STANDARD_AXES, SpringCommand(Axis.PITCH, 0.25, 0.35, 0.02), 1000
+    )
     out = to_sdl_effect(sdl2, mirror)
     assert isinstance(out, sdl2.SDL_HapticEffect)
     assert out.type == sdl2.SDL_HAPTIC_SPRING
@@ -64,12 +67,18 @@ def test_spring_converts_to_condition_struct(sdl2: ModuleType) -> None:
 def test_sine_and_constant_convert(sdl2: ModuleType) -> None:
     api = RealSdl(sdl2)
     sine = sine_effect(
-        api, Axis.ROLL, period=182, magnitude=0.4, length_ms=400, fade_length=250
+        api,
+        STANDARD_AXES,
+        Axis.ROLL,
+        period=182,
+        magnitude=0.4,
+        length_ms=400,
+        fade_length=250,
     )
     periodic = to_sdl_effect(sdl2, sine).periodic
     assert (periodic.period, periodic.magnitude) == (182, 13107)
     assert (periodic.length, periodic.fade_length) == (400, 250)
-    pulse = pulse_effect(api, PulseCommand(Axis.ROLL, -0.6, 0.02))
+    pulse = pulse_effect(api, STANDARD_AXES, PulseCommand(Axis.ROLL, -0.6, 0.02))
     constant = to_sdl_effect(sdl2, pulse).constant
     assert (constant.level, constant.length) == (-19660, 20)
     assert list(constant.direction.dir) == [1, 0, 0]

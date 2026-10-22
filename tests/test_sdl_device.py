@@ -14,6 +14,7 @@ from wardogs_flight_eng.inputs.sdl_device import (
     enumerate_devices,
     open_by_guid,
 )
+from wardogs_flight_eng.inputs.sdl_real import initialise
 
 
 def test_enumerate_reports_each_joystick_and_releases_it() -> None:
@@ -23,15 +24,25 @@ def test_enumerate_reports_each_joystick_and_releases_it() -> None:
         DeviceInfo(0, GUID_STICK, "MOZA AB9 Base", 3, 2, True),
         DeviceInfo(1, GUID_PEDALS, "Rudder Pedals", 4, 2, False),
     ]
-    assert fake.args("SDL_Init") == [(fake.SDL_INIT_JOYSTICK | fake.SDL_INIT_HAPTIC,)]
     assert fake.args("SDL_JoystickClose") == [(GUID_STICK,), (GUID_PEDALS,)]
+    assert fake.count("SDL_Init") == 0
 
 
-def test_init_failure_raises_sdl_error() -> None:
+def test_initialise_starts_subsystems_and_ignores_joystick_events() -> None:
+    fake = FakeSdl(stick())
+    initialise(fake)
+    assert fake.calls == [
+        ("SDL_Init", (fake.SDL_INIT_JOYSTICK | fake.SDL_INIT_HAPTIC,)),
+        ("SDL_JoystickEventState", (fake.SDL_IGNORE,)),
+    ]
+
+
+def test_initialise_failure_raises_sdl_error() -> None:
     fake = FakeSdl(stick())
     fake.init_result = -1
-    with pytest.raises(SdlError, match="fake SDL error"):
-        enumerate_devices(fake)
+    with pytest.raises(SdlError, match="SDL_Init failed: fake SDL error"):
+        initialise(fake)
+    assert fake.count("SDL_JoystickEventState") == 0
 
 
 def test_open_by_guid_keeps_only_the_match_open() -> None:
