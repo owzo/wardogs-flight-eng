@@ -61,14 +61,44 @@ def test_pattern_steps_through_seven_vectors_and_wraps() -> None:
         assert rounds[index] == pytest.approx((yaw * 0.15, pitch * 0.15))
 
 
-def test_reload_tap_during_reload_is_ignored_and_release_goes_idle() -> None:
-    w = WeaponModel(ROCKETS_LB, amplitude=1.0)
+def test_second_reload_tap_is_ignored_not_restarted() -> None:
+    w = WeaponModel(ROCKETS_LB, amplitude=1.0)  # 7.0 s reload
     w.step(0.1, True, True)
+    w.step(6.0, True, False)
+    w.step(0.05, True, True)  # 6.15 s in; a restart would end the window at 13.05 s
     assert _state(w) == "reloading"
-    w.step(6.0, True, True)  # second tap must not extend the 7.0 s window
+    w.step(0.8, False, False)  # 6.95 s: still inside the original window
     assert _state(w) == "reloading"
-    w.step(1.0, False, False)
+    w.step(0.1, False, False)  # 7.05 s: the original window has ended
     assert _state(w) == "idle"
+
+
+def test_fire_released_during_reload_then_repressed_rewinds() -> None:
+    w = WeaponModel(MINIGUNS, amplitude=1.0)  # 6.25 s reload, 0.25 s wind-up
+    w.step(0.1, True, True)
+    w.step(6.2, False, False)  # 6.3 s: window over, fire not held
+    assert _state(w) == "idle"
+    assert w.step(0.1, True, False) == [] and _state(w) == "winding"
+    assert w.step(0.1, True, False) == [] and _state(w) == "winding"
+    assert len(w.step(0.1, True, False)) >= 1  # wind-up ended 0.05 s in
+    assert _state(w) == "firing"
+
+
+def _total_rounds(w: WeaponModel, dt: float, ticks: int) -> int:
+    return sum(len(w.step(dt, True, False)) for _ in range(ticks))
+
+
+def test_fire_rate_is_exact_across_many_small_ticks() -> None:
+    w = WeaponModel(MINIGUNS, amplitude=1.0)
+    w.step(0.25, True, False)
+    # Rounds at 0, 0.04, ..., 0.96; the one at exactly 1.00 s is the next tick's.
+    assert _total_rounds(w, 0.01, 100) == 25
+
+
+def test_fire_rate_is_exact_at_sixty_hertz_ticks() -> None:
+    w = WeaponModel(MINIGUNS, amplitude=1.0)
+    w.step(0.25, True, False)
+    assert _total_rounds(w, 1 / 60, 60) == 25
 
 
 def test_negative_dt_counts_as_zero() -> None:
