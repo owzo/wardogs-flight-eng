@@ -22,6 +22,46 @@ Owner action when the base arrives: open the Hind / UH-1H preset, read its
 spring / damper / friction / inertia percentages, and use them as the first
 guess for `feel.*`. Export it with Save As; the file is JSON (see below).
 
+## A "Wardogs" Moza Cockpit preset (owner-supplied, author and licence unknown)
+
+Found by the owner 2026-10-22 (`WD.preset`, Moza Cockpit format 1.0.4,
+`devices: ["AB6"]`, `product_type: "AS23"`, `games: [""]`, dated
+2026-09-26). Because no game is bound, none of its telemetry effects can
+fire (rotor rumble 50, gun vibration 100, weapon release 67, blade slap /
+VRS / ETL off are all inert); what the base actually does with it is the
+`device_params` block:
+
+| Field | Value | Meaning |
+|---|---|---|
+| `bacic_spring` | 50 | centring spring, % of max |
+| `bacic_damper` | 30 | velocity damping |
+| `bacic_inertia` | 10 | |
+| `bacic_friction` | 10 | |
+| `bacic_overall_strength` | 70 | global scale |
+| `bacic_max_torque` | 100 | torque ceiling |
+| `bacic_start_force_enble` / `_coefficient` / `_transition_zone` | 1 / 20 / 10 | breakout force 20 % with a 10 % blend |
+| `bacic_gameForceFeedback` | 100 | DirectInput game effects pass through at 100 % |
+| `bacic_force_model` | 2 | advanced force model |
+| `hardware_balancing_enable` | 0 | Moza's own trim/centering helper off |
+| `spring_x_link_y`, `spring_pos_link_neg` | true | one spring value for both axes and directions |
+| `Main_VariablePointCurve_AileronPositiveBack` | 15, 32, 49, 66, 83, 100 | roll spring curve starts at 15 % (pre-load), linear to 100 |
+| `Main_VariablePointCurve_ElevatorPositiveBack` | 0, 20, 40, 60, 80, 100 | pitch spring curve linear |
+| `Main_DirectInput_Spring_Effect_Cp_Offset` | [0, 0] | DirectInput spring centre offset passes through unchanged |
+
+How it combines with Flight Eng: this preset is the right *companion*
+profile, with one change. Flight Eng owns the spring (its centre moves with
+trim lock), so **set `bacic_spring` to 0 in the Cockpit copy** and let Cockpit
+keep damper 30 / friction 10 / inertia 10 / breakout 20 — effects Flight Eng
+does not synthesise in v1. Two springs at once (Cockpit's at origin, Flight
+Eng's at the trim point) would pull the stick to a point between them and
+break trim lock. The `_Cp_Offset [0, 0]` pass-through and
+`bacic_gameForceFeedback 100` are what let Flight Eng's DirectInput spring,
+sine and constant effects reach the motors.
+
+Seeds for the profiles' `taste` fields: `feel.spring_coefficient 0.5`
+(matches the preset's 50 %), overall ceiling 0.7 (`safety.force_ceiling`),
+a 20 % breakout is worth adding as a later `feel.breakout` once v1 is felt.
+
 ## Moza Cockpit `.preset` file format (from a public AB6 preset, GPL-3.0 repo)
 
 JSON, `"version": "1.0.3"` / `"1.0.4"`, keys `device_params`,
