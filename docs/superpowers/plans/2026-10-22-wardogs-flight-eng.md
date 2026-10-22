@@ -517,7 +517,8 @@ def test_dry_run_log_shows_trim_lock_and_fire(tmp_path):
     springs_after_lock = [r for r in rows if r["kind"] == "spring" and r["axis"] == "pitch" and r["t"] > 5.5]
     assert springs_after_lock[0]["center"] == pytest.approx(0.3, abs=0.01)
     pulses = [r for r in rows if r["kind"] == "pulse" and 7.3 < r["t"] < 9.0]
-    assert 80 <= len(pulses) / 2 <= 90                    # ~25 Hz for ~1.7 s after 0.25 s wind-up
+    assert 80 <= len(pulses) <= 90                        # 2 pulses per round; ~25 Hz for ~1.7 s after 0.25 s wind-up → 42 rounds
+    assert sum(r["axis"] == "pitch" for r in pulses) == sum(r["axis"] == "roll" for r in pulses) == 42
     assert plot.exists() and "<svg" in plot.read_text()
 
 def test_plot_has_one_row_per_axis(tmp_path):
