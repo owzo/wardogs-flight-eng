@@ -1,0 +1,54 @@
+{
+  "name": "havoc",
+  "airframe": "havoc",
+  "pilot_weapon": null,
+  "verify_in_game": [],
+  "device_map": {
+    "devices": {},
+    "axes": {},
+    "buttons": {},
+    "calibration": {
+      "collective_bottom_raw": -1.0,
+      "collective_top_raw": 1.0,
+      "pedals_center_raw": 0.0
+    }
+  },
+  "feel": {
+    "spring_coefficient": 0.65,
+    "roll_scale": 0.5,
+    "deadband": 0.02,
+    "trim_slew_s": 0.3
+  },
+  "rotor": {
+    "base_amplitude": 0.35,
+    "deflection_factor": 0.5,
+    "spool_up_s": 3.0,
+    "spool_down_rpm_per_s": null
+  },
+  "recoil": {
+    "amplitude": 0.0,
+    "rocket_kick": [
+      0.0,
+      -1.0
+    ],
+    "shake_amplitude": 0.3
+  },
+  "safety": {
+    "force_ceiling": 0.6,
+    "watchdog_s": 0.25
+  },
+  "taste": [
+    "spring_coefficient",
+    "roll_scale",
+    "deadband",
+    "trim_slew_s",
+    "base_amplitude",
+    "deflection_factor",
+    "spool_up_s",
+    "amplitude",
+    "rocket_kick",
+    "shake_amplitude",
+    "force_ceiling",
+    "watchdog_s"
+  ]
+}
