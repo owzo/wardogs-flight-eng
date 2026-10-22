@@ -62,6 +62,53 @@ Seeds for the profiles' `taste` fields: `feel.spring_coefficient 0.5`
 (matches the preset's 50 %), overall ceiling 0.7 (`safety.force_ceiling`),
 a 20 % breakout is worth adding as a later `feel.breakout` once v1 is felt.
 
+### Two more AB9 Littlebird presets (owner-supplied 2026-10-22, authors unknown)
+
+`wardogs helo icemanisaac.preset` ("helo icemanisaac", 2026-09-20) and
+`WARDOGS-beta-preset.preset` ("**HELO DEFAULT** WARDOGS LITTLE BIRD",
+2026-09-04). Both `devices: ["AB9"]`, `games: ["dcs_world"]`,
+`vehicles: "OH-6A"`: their telemetry blocks only ever fired in DCS (OH-6A
+mod); in Wardogs only `device_params` act.
+
+| Field | icemanisaac | HELO DEFAULT |
+|---|---|---|
+| `bacic_spring` | 30 | 40 |
+| `bacic_damper` | 30 | 55 |
+| `bacic_friction` | 10 | 77 |
+| `bacic_inertia` | 10 | 15 |
+| `bacic_overall_strength` | 70 | 100 |
+| `bacic_gameForceFeedback` | 100 | 75 |
+| `bacic_start_force_enble` / coefficient | 1 / 20 | 0 / 20 |
+| `bacic_force_model` | 2 | 1 |
+| `hardware_balancing_enable` (buttons all 0) | 1 | 1 |
+| `ad_y_axis_follow_ratio` | 20 | 20 |
+
+Three independent Wardogs presets converge on damper 30–55, inertia
+10–15, spring 30–50 and overall 70–100; the "HELO DEFAULT" author went the
+classic helicopter route (high friction 77 + damper 55, lower spring) so the
+stick stays where it is put. Their DCS-only helicopter telemetry values are
+still useful magnitude references: rotor rumble 20, blade slap 20 (13–30 kt,
+5–20 deg AoA), VRS max 13, ETL 12 (4–20 kt), gun vibration 16, weapon release
+31 at direction 180, wind 11 — all on the 0–100 Cockpit scale.
+
+**Moza Cockpit has built-in hardware trim.** The `hardware_balancing_*`
+block is a firmware trim helper: `hardware_balancing_trim` and
+`hardware_balancing_recenter` take button ids (the AB6 Cessna preset binds
+them to buttons 3 and 17, with nose-up/down and wing-down nudges on 200–203),
+`hardware_balancing_speed` is the slew. Both AB9 presets enable it but bind no
+buttons. This is the same tap-to-lock / tap-to-reset model as Flight Eng's
+trim, done in firmware.
+
+Two valid divisions of labour for the tuning pass; pick one, never both:
+- **A (spec default):** Flight Eng owns spring + trim; Cockpit `bacic_spring`
+  0, `hardware_balancing_enable` 0, Cockpit keeps damper / friction / inertia
+  / breakout. Portable to any DirectInput base.
+- **B (Moza-native trim):** Cockpit owns spring + hardware trim (bind the
+  trim and recenter buttons); Flight Eng profile sets
+  `feel.spring_coefficient` 0 and supplies only rotor buzz and recoil. Lower
+  latency trim in firmware, AB9-only. No code change: a zero spring
+  coefficient disables Flight Eng's spring and makes its trim buttons inert.
+
 ## Moza Cockpit `.preset` file format (from a public AB6 preset, GPL-3.0 repo)
 
 JSON, `"version": "1.0.3"` / `"1.0.4"`, keys `device_params`,
