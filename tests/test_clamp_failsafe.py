@@ -83,3 +83,33 @@ def test_ceiling_is_read_only() -> None:
     assert backend.ceiling == 0.6
     with pytest.raises(AttributeError):
         backend.ceiling = 1.0  # type: ignore[misc]
+
+
+def test_finite_clamp_warns_once_per_axis_and_kind(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    backend = ClampedBackend(RecordingBackend(), ceiling=0.6)
+    with caplog.at_level(logging.DEBUG, logger="wardogs_flight_eng.outputs.clamp"):
+        for t in (0.0, 0.005, 0.01):
+            backend.apply(t, [_sine(0.9)])
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert len(warnings) == 1
+        assert "SineCommand on pitch" in warnings[0].getMessage()
+        assert len([r for r in caplog.records if r.levelno == logging.DEBUG]) == 2
+
+        backend.apply(0.015, [_spring(0.9), _spring(0.9)])
+        backend.apply(0.02, [SineCommand(Axis.ROLL, 5.0, 0.9)])
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 3
+    assert "SpringCommand on pitch" in warnings[1].getMessage()
+    assert "SineCommand on roll" in warnings[2].getMessage()
+
+
+def test_non_finite_warns_on_every_occurrence(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    backend = ClampedBackend(RecordingBackend(), ceiling=0.6)
+    with caplog.at_level(logging.WARNING, logger="wardogs_flight_eng.outputs.clamp"):
+        for t in (0.0, 0.005, 0.01):
+            backend.apply(t, [_sine(math.nan)])
+    assert len(caplog.records) == 3

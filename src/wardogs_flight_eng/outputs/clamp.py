@@ -12,6 +12,7 @@ from typing import assert_never
 
 from wardogs_flight_eng.engine.commands import (
     AllOffCommand,
+    Axis,
     Command,
     PulseCommand,
     SineCommand,
@@ -38,6 +39,7 @@ class ClampedBackend:
             raise ValueError(f"ceiling must be in (0, 1], got {ceiling!r}")
         self._inner = inner
         self._ceiling = ceiling
+        self._warned: set[tuple[Axis, str]] = set()
 
     @property
     def ceiling(self) -> float:
@@ -79,14 +81,38 @@ class ClampedBackend:
             return 0.0
         return min(max(value, floor), self._ceiling)
 
-    @staticmethod
-    def _unchanged(command: Command, value: float, limited: float) -> bool:
-        """Return True when no clamp was needed; otherwise warn once."""
+    def _unchanged(
+        self,
+        command: SpringCommand | SineCommand | PulseCommand | TransientCommand,
+        value: float,
+        limited: float,
+    ) -> bool:
+        """Return True when no clamp was needed; otherwise log the clamp.
+
+        Non-finite values warn every time (they should never occur). A finite
+        clamp warns once per (axis, command kind), then logs at DEBUG, so a
+        profile that sits above the ceiling does not flood the log each tick.
+        """
         if limited == value:
             return True
-        name = type(command).__name__
-        if math.isfinite(value):
-            logger.warning("clamped %s %.3f -> %.3f", name, value, limited)
+        kind = type(command).__name__
+        if not math.isfinite(value):
+            logger.warning("non-finite value in %s replaced by %.1f", kind, limited)
+            return False
+        key = (command.axis, kind)
+        first = key not in self._warned
+        self._warned.add(key)
+        if first:
+            logger.warning(
+                "clamped %s on %s from %.3f to %.3f; further clamps of this kind"
+                " are logged at DEBUG",
+                kind,
+                command.axis,
+                value,
+                limited,
+            )
         else:
-            logger.warning("non-finite value in %s replaced by %.1f", name, limited)
+            logger.debug(
+                "clamped %s on %s from %.3f to %.3f", kind, command.axis, value, limited
+            )
         return False
