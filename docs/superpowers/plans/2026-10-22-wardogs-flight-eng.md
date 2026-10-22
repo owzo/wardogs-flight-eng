@@ -345,7 +345,7 @@ def test_trim_lock_tap_moves_spring_center_once():
 def test_buzz_frequency_is_airframe_one_per_rev():
     e = engine_for("havoc")
     for _ in range(400): cmds = e.step(0.01, frame(collective=1.0))
-    assert {c.frequency_hz for c in cmds if isinstance(c, SineCommand)} == {pytest.approx(4.5)}
+    assert [c.frequency_hz for c in cmds if isinstance(c, SineCommand)] == [pytest.approx(4.5)] * 2
 
 def test_fire_yields_pulses_on_both_axes_after_windup():
     e = engine_for("littlebird-miniguns")
@@ -374,9 +374,9 @@ def test_havoc_has_no_recoil():
 
 def test_rockets_emit_transient_shake_per_round():
     e = engine_for("littlebird-rockets")
-    cmds = e.step(0.2, frame(0, 0, 0.5, 0, Button.FIRE))          # 350 rpm → 1 round in 0.2 s
+    cmds = e.step(0.2, frame(0, 0, 0.5, 0, Button.FIRE))          # 350 rpm, no wind-up: rounds at t=0 and t=0.171 s
     shakes = [c for c in cmds if isinstance(c, TransientCommand)]
-    assert len(shakes) == 2 and shakes[0].frequency_hz == 6 and shakes[0].duration_s == 0.4 and shakes[0].magnitude == 0.3
+    assert len(shakes) == 4 and shakes[0].frequency_hz == 6 and shakes[0].duration_s == 0.4 and shakes[0].magnitude == 0.3
 
 def test_rotor_toggle_tap_spools_down():
     e = engine_for("littlebird-miniguns")
