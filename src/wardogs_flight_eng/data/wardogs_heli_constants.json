@@ -1,0 +1,202 @@
+{
+  "provenance": {
+    "build_id": "25937608",
+    "extracted_at": "2026-10-22",
+    "mappings": "Wardogs20261015-new.usmap"
+  },
+  "airframes": {
+    "littlebird": {
+      "plugin": "ROT_03",
+      "mass_kg": 722,
+      "main_rotor_rpm": 330.4,
+      "rpm_source": "FC_ROT_03_MainRotorRPM_MaterialValue",
+      "spool_down_rpm_per_s": 850
+    },
+    "lakota": {
+      "plugin": "ROT_02",
+      "mass_kg": 7500,
+      "main_rotor_rpm": 250,
+      "rpm_source": "FC_ROT_02_MainRotorRPM_MaterialValue",
+      "spool_down_rpm_per_s": null
+    },
+    "havoc": {
+      "plugin": "ROT_04",
+      "mass_kg": 9500,
+      "main_rotor_rpm": 270,
+      "rpm_source": "DA_ROT_04_Engine.MainRotorOperatingRPM",
+      "spool_down_rpm_per_s": null
+    }
+  },
+  "weapons": {
+    "littlebird_miniguns": {
+      "asset": "WE_ROT_03_AttachedMachineGuns",
+      "rounds_per_minute": 1500,
+      "windup_s": 0.25,
+      "reload_s": 6.25,
+      "reload_breakdown": [
+        1,
+        4.25,
+        1
+      ],
+      "shake_multiplier": 0.15,
+      "shake": null,
+      "recoil_pattern": [
+        [
+          1.107,
+          2.406
+        ],
+        [
+          -0.308,
+          1.661
+        ],
+        [
+          -0.988,
+          0.876
+        ],
+        [
+          -0.548,
+          1.838
+        ],
+        [
+          0.504,
+          1.501
+        ],
+        [
+          -0.205,
+          2.853
+        ],
+        [
+          -1.093,
+          2.003
+        ]
+      ],
+      "rounds_per_reload": null
+    },
+    "littlebird_rockets": {
+      "asset": "WE_ROT_03_Weapon_122mm",
+      "rounds_per_minute": 350,
+      "windup_s": 0,
+      "reload_s": 7,
+      "reload_breakdown": [
+        1,
+        6
+      ],
+      "shake_multiplier": null,
+      "shake": "littlebird_heli_firing",
+      "recoil_pattern": [],
+      "rounds_per_reload": null
+    },
+    "lakota_cannon": {
+      "asset": "WE_ROT_02_Weapon_30mmCannon",
+      "rounds_per_minute": 250,
+      "windup_s": 0,
+      "reload_s": 8,
+      "reload_breakdown": [
+        8
+      ],
+      "shake_multiplier": null,
+      "shake": "heli_firing",
+      "recoil_pattern": [],
+      "rounds_per_reload": null
+    },
+    "lakota_rockets": {
+      "asset": "WE_ROT_02_Weapon_122mm",
+      "rounds_per_minute": 500,
+      "windup_s": 0,
+      "reload_s": 7,
+      "reload_breakdown": [
+        1,
+        6
+      ],
+      "shake_multiplier": null,
+      "shake": "heli_firing",
+      "recoil_pattern": [],
+      "rounds_per_reload": null
+    },
+    "havoc_mg": {
+      "asset": "WE_ROT_04_MountedMachineGun",
+      "rounds_per_minute": 1500,
+      "windup_s": 1.0,
+      "reload_s": 7,
+      "reload_breakdown": [
+        1,
+        5,
+        1
+      ],
+      "shake_multiplier": 0.15,
+      "shake": null,
+      "recoil_pattern": [
+        [
+          1.107,
+          2.406
+        ],
+        [
+          -0.308,
+          1.661
+        ],
+        [
+          -0.988,
+          0.876
+        ],
+        [
+          -0.548,
+          1.838
+        ],
+        [
+          0.504,
+          1.501
+        ],
+        [
+          -0.205,
+          2.853
+        ],
+        [
+          -1.093,
+          2.003
+        ]
+      ],
+      "rounds_per_reload": null
+    }
+  },
+  "shakes": {
+    "heli_firing": {
+      "asset": "B_CameraShake_HeliFiring",
+      "frequency_hz": 8,
+      "duration_s": 0.4,
+      "blend_in_s": 0,
+      "blend_out_s": 0.25
+    },
+    "littlebird_heli_firing": {
+      "asset": "B_CameraShake_Littlebird_HeliFiring",
+      "frequency_hz": 6,
+      "duration_s": 0.4,
+      "blend_in_s": 0,
+      "blend_out_s": 0.25
+    },
+    "havoc_mg_firing": {
+      "asset": "BP_ROT_04_Camera_MachineGun_FiringShake",
+      "frequency_hz": 12,
+      "duration_s": 0.4,
+      "blend_in_s": 0,
+      "blend_out_s": 0.6
+    },
+    "crash_first_person": {
+      "asset": "BP_CameraShake_Crash_FirstPerson",
+      "frequency_hz": 50,
+      "duration_s": 0.25,
+      "blend_in_s": 0,
+      "blend_out_s": 0
+    },
+    "landed_first_person": {
+      "asset": "BP_CameraShake_Landed_FirstPerson",
+      "frequency_hz": 2,
+      "duration_s": 0.3,
+      "blend_in_s": 0.1,
+      "blend_out_s": 0
+    }
+  },
+  "input": {
+    "pedal_heading_hold_threshold": 0.05,
+    "hotas_deadzone_default": 0.05
+  }
+}
