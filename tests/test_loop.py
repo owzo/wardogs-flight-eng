@@ -20,7 +20,7 @@ from loop_support import (
 )
 
 from wardogs_flight_eng.constants.loader import load_constants
-from wardogs_flight_eng.engine.commands import AllOffCommand
+from wardogs_flight_eng.engine.commands import AllOffCommand, Command, SineCommand
 from wardogs_flight_eng.engine.profile import PROFILES_DIR, load_profile
 from wardogs_flight_eng.engine.synth import FlightEngine
 from wardogs_flight_eng.inputs.composite import CompositeInput
@@ -88,6 +88,7 @@ def test_loop_runs_fixed_ticks_and_tears_down(
         max_ticks=50,
     )
     assert r.ticks == 50 and backend.closed and backend.all_off_calls >= 1
+    assert backend.events == ["apply"] * 50 + ["all_off", "close"]
 
 
 def test_device_lost_ends_loop_and_zeroes_forces(
@@ -187,6 +188,25 @@ def test_profile_cycle_wraps_and_logs_the_new_profile(
     r = run([engine_lb, engine_lakota], source, backend, sleep=script, max_ticks=4)
     assert r.active_profile == "littlebird-miniguns" and backend.all_off_calls == 3
     assert "lakota" in caplog.text and "littlebird-miniguns" in caplog.text
+
+
+def test_profile_cycle_zeroes_forces_before_the_incoming_engine_applies(
+    engine_lb: FlightEngine,
+    engine_lakota: FlightEngine,
+    source: CompositeInput,
+    backend: RecordingBackend,
+    devices: Devices,
+) -> None:
+    script = ButtonScript(devices, [set(), {PROFILE_CYCLE_IDX}, set()])
+    r = run([engine_lb, engine_lakota], source, backend, sleep=script, max_ticks=3)
+    assert r.active_profile == "lakota"
+    assert backend.events == ["apply", "all_off", "apply", "apply", "all_off", "close"]
+    fresh_lakota = make_engine("lakota").step(0.01, source.read())
+    assert _sine_hz(backend.applied[1]) == pytest.approx(_sine_hz(fresh_lakota))
+
+
+def _sine_hz(commands: list[Command]) -> list[float]:
+    return [c.frequency_hz for c in commands if isinstance(c, SineCommand)]
 
 
 # --- beyond the brief: every exit path zeroes forces and releases ------------
