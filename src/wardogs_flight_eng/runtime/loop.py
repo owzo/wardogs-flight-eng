@@ -12,6 +12,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
+from wardogs_flight_eng.engine.commands import AllOffCommand
 from wardogs_flight_eng.engine.frame import Button
 from wardogs_flight_eng.engine.synth import FlightEngine
 from wardogs_flight_eng.inputs.composite import CompositeInput
@@ -69,13 +70,17 @@ class _Tick:
         if Button.PROFILE_CYCLE in frame.held - self._previous_held:
             self._cycle_profile()
         self._previous_held = frame.held
-        if dt > self._watchdog_s:
+        commands = self.engine.step(dt, frame)
+        if not (0.0 <= dt <= self._watchdog_s):
+            # The engine gates on its own profile's watchdog; the loop's is the
+            # shortest of all profiles, so it overrides a laxer active engine.
             log.warning(
-                "watchdog: tick gap %.3f s exceeds %.3f s, forces off this tick",
+                "watchdog: tick gap %.3f s is outside 0..%.3f s, forces off this tick",
                 dt,
                 self._watchdog_s,
             )
-        self._backend.apply(t, self.engine.step(dt, frame))
+            commands = [AllOffCommand()]
+        self._backend.apply(t, commands)
         self.count += 1
         self._wait(t)
 

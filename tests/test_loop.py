@@ -19,7 +19,9 @@ from loop_support import (
     make_source,
 )
 
+from wardogs_flight_eng.constants.loader import load_constants
 from wardogs_flight_eng.engine.commands import AllOffCommand
+from wardogs_flight_eng.engine.profile import PROFILES_DIR, load_profile
 from wardogs_flight_eng.engine.synth import FlightEngine
 from wardogs_flight_eng.inputs.composite import CompositeInput
 from wardogs_flight_eng.runtime.loop import LoopResult, run_loop
@@ -264,3 +266,32 @@ def test_run_loop_rejects_no_engines_and_still_releases(
     with pytest.raises(ValueError, match="engine"):
         run_loop([], source, backend, rate_hz=100, watchdog_s=0.25)
     assert backend.all_off_calls == 1 and backend.closed
+
+
+def test_loop_watchdog_overrides_a_laxer_active_engine(
+    source: CompositeInput, backend: RecordingBackend
+) -> None:
+    lax, strict = (
+        _engine_with_watchdog("littlebird-miniguns", 1.0),
+        _engine_with_watchdog("lakota", 0.75),
+    )
+    clock = StepClock([0.0, 0.0, 0.01, 0.01, 0.91, 0.91])
+    r = run_loop(
+        [lax, strict],
+        source,
+        backend,
+        rate_hz=100,
+        watchdog_s=0.75,
+        clock=clock,
+        sleep=lambda s: None,
+        max_ticks=3,
+    )
+    assert r.active_profile == "littlebird-miniguns"
+    assert AllOffCommand() not in backend.applied[1]
+    assert backend.applied[2] == [AllOffCommand()]  # 0.9 s: under 1.0, over 0.75
+
+
+def _engine_with_watchdog(name: str, watchdog_s: float) -> FlightEngine:
+    profile = load_profile(PROFILES_DIR / f"{name}.json")
+    safety = profile.safety.model_copy(update={"watchdog_s": watchdog_s})
+    return FlightEngine(profile.model_copy(update={"safety": safety}), load_constants())
