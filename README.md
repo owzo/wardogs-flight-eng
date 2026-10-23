@@ -353,6 +353,15 @@ code task.
    `WFE_ROLL_INVERT` set the stick's bindings). If `spring_center_moves` is
    false, open an issue titled "dinput8 fallback backend" (the planned fix is a
    `ctypes` binding to `dinput8.dll` behind the same `ForceBackend` interface).
+   Then A/B the persistent-effect refresh. By default the backend uploads a
+   spring or rotor sine only when it changes and re-runs it every half
+   effect length (about twice a second), because on Windows every update or
+   run restarts a playing effect. `SdlHapticBackend(...,
+   refresh_every_tick=True)` restores the earlier behaviour: update and re-run
+   all four persistent effects every tick. Run the conformance test once
+   as above and once with `WFE_REFRESH_EVERY_TICK=1` added, and compare the
+   spring hold and the logged sine range: the buzz should be smooth in both,
+   and if only the per-tick mode feels right, report it in an issue.
 4. Fly each profile and adjust only the `taste` values.
 5. Commit the tuned profiles.
 

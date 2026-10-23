@@ -3,8 +3,6 @@
 import logging
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass
-from functools import partial
 from typing import assert_never
 
 from wardogs_flight_eng.engine.commands import (
@@ -26,35 +24,19 @@ from wardogs_flight_eng.outputs.sdl_channel import (
     attempt,
 )
 from wardogs_flight_eng.outputs.sdl_effects import (
-    advance_phase,
     milliseconds,
     period_ms,
     pulse_effect,
-    silenced,
     sine_effect,
     spring_effect,
     transient_effect,
 )
+from wardogs_flight_eng.outputs.sdl_persistent import PersistentEffects, SineClock
 from wardogs_flight_eng.outputs.sdl_probe import PrimitiveReport, probe_primitives
 
 __all__ = ["PrimitiveReport", "SdlHapticBackend", "probe_primitives"]
 
 log = logging.getLogger(__name__)
-
-IDLE_PERIOD_MS = 1000  # sine period until a positive frequency is commanded
-
-
-@dataclass(slots=True)
-class _Held:
-    effect_id: int
-    effect: HapticEffect
-
-
-@dataclass(slots=True)
-class _SineClock:
-    period: int = IDLE_PERIOD_MS
-    phase: int = 0
-    t: float | None = None
 
 
 class SdlHapticBackend:
@@ -66,12 +48,17 @@ class SdlHapticBackend:
     spring centre and pulse level of an inverted axis.
 
     Springs and sines are persistent: one effect per axis, created on first
-    use, then updated in place and re-run every tick (never recreated). Their
-    length is finite -- ``persistent_length_s`` (the CLI passes 2 x the
-    profile's watchdog) -- and each tick's update + run restarts it, so if the
+    use and never recreated. Their length is finite -- ``persistent_length_s``
+    (the CLI passes 2 x the profile's watchdog, at least 1 s) -- so if the
     loop freezes the base lets the forces time out instead of holding them.
-    Because a run restarts a sine from its ``phase``, the phase is carried
-    forward from tick to tick so the waveform stays continuous.
+    By default (``refresh_every_tick=False``) an effect is updated only when
+    the command changes it, and run only after an update, after ``all_off``,
+    or once half its length has passed since its last run (~2 runs/s at 1 s):
+    on Windows every update or run restarts a playing effect.
+    ``refresh_every_tick=True`` is the earlier behaviour -- update and run
+    every persistent effect every tick -- kept so a hardware pass can A/B the
+    two. A restarted sine starts from the phase its waveform has reached, so
+    it stays continuous in both modes (``sdl_persistent.SineClock``).
 
     Pulses (constant) and transients (fading sine) play from a pool of four
     slots per axis and kind; slots are destroyed in ``close``. A detached
@@ -84,6 +71,7 @@ class SdlHapticBackend:
         persistent_length_s: float = 1.0,
         *,
         axis_map: HapticAxisMap,
+        refresh_every_tick: bool = False,
     ) -> None:
         if not (math.isfinite(persistent_length_s) and persistent_length_s > 0):
             raise ValueError(
@@ -93,9 +81,13 @@ class SdlHapticBackend:
         self._axes = axis_map
         self._channel = HapticChannel(device.api, device.joystick)
         self._length_ms = milliseconds(persistent_length_s)
-        self._held: dict[tuple[str, Axis], _Held] = {}
+        self._persistent = PersistentEffects(
+            self._channel,
+            persistent_length_s,
+            refresh_every_tick=refresh_every_tick,
+        )
         self._pools: dict[tuple[str, Axis], EffectPool] = {}
-        self._sines: dict[Axis, _SineClock] = {}
+        self._sines: dict[Axis, SineClock] = {}
         self._closed = False
 
     def apply(self, t: float, commands: Sequence[Command]) -> None:
@@ -116,11 +108,7 @@ class SdlHapticBackend:
             return
         failures: list[HapticFailure] = []
         attempt(failures, self._channel.stop_all)
-        for held in self._held.values():
-            held.effect = silenced(held.effect)
-            attempt(
-                failures, partial(self._channel.update, held.effect_id, held.effect)
-            )
+        self._persistent.silence(failures)
         if failures:
             raise failures[0]
 
@@ -142,9 +130,10 @@ class SdlHapticBackend:
                 self.all_off()
             case SpringCommand():
                 effect = spring_effect(self._api, self._axes, command, self._length_ms)
-                self._hold("spring", command.axis, effect)
+                if self._persistent.due(t, ("spring", command.axis), effect):
+                    self._persistent.play(t, ("spring", command.axis), effect)
             case SineCommand():
-                self._hold("sine", command.axis, self._sine(t, command))
+                self._sine(t, command)
             case PulseCommand():
                 pool = self._pool("pulse", command.axis)
                 effect = pulse_effect(self._api, self._axes, command)
@@ -154,33 +143,30 @@ class SdlHapticBackend:
             case _:
                 assert_never(command)
 
-    def _hold(self, kind: str, axis: Axis, effect: HapticEffect) -> None:
-        held = self._held.get((kind, axis))
-        if held is None:
-            held = _Held(self._channel.new(effect), effect)
-            self._held[(kind, axis)] = held
-        else:
-            self._channel.update(held.effect_id, effect)
-            held.effect = effect
-        self._channel.run(held.effect_id)
-
-    def _sine(self, t: float, command: SineCommand) -> HapticEffect:
+    def _sine(self, t: float, command: SineCommand) -> None:
         """The axis's sine; frequency 0 silences it and keeps the last period."""
-        clock = self._sines.setdefault(command.axis, _SineClock())
-        if clock.t is not None:
-            clock.phase = advance_phase(clock.phase, t - clock.t, clock.period)
-        clock.t = t
+        axis, key = command.axis, ("sine", command.axis)
+        clock = self._sines.setdefault(axis, SineClock())
         period = period_ms(command.frequency_hz)
-        if period is not None:
-            clock.period = period
+        magnitude = command.magnitude if period is not None else 0.0
+        period = clock.period if period is None else period
+        steady = self._sine_effect(axis, period, magnitude, clock.phase)
+        if not self._persistent.due(t, key, steady):
+            return
+        phase = clock.restart(t, period)
+        self._persistent.play(t, key, self._sine_effect(axis, period, magnitude, phase))
+
+    def _sine_effect(
+        self, axis: Axis, period: int, magnitude: float, phase: int
+    ) -> HapticEffect:
         return sine_effect(
             self._api,
             self._axes,
-            command.axis,
-            period=clock.period,
-            magnitude=command.magnitude if period is not None else 0.0,
+            axis,
+            period=period,
+            magnitude=magnitude,
             length_ms=self._length_ms,
-            phase=clock.phase,
+            phase=phase,
         )
 
     def _transient(self, t: float, command: TransientCommand) -> None:
@@ -195,5 +181,5 @@ class SdlHapticBackend:
         return self._pools.setdefault((kind, axis), EffectPool(self._channel))
 
     def _effect_ids(self) -> list[int]:
-        held = [entry.effect_id for entry in self._held.values()]
-        return held + [i for pool in self._pools.values() for i in pool.effect_ids]
+        pooled = [i for pool in self._pools.values() for i in pool.effect_ids]
+        return self._persistent.effect_ids + pooled

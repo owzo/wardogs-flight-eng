@@ -20,9 +20,9 @@ from wardogs_flight_eng.engine.commands import (
 from wardogs_flight_eng.outputs.protocol import ForceBackend
 
 
-def test_spring_update_in_place_not_recreated() -> None:
+def test_refresh_every_tick_updates_in_place_and_reruns_every_tick() -> None:
     fake = FakeSdl(stick())
-    backend: ForceBackend = open_backend(fake)
+    backend: ForceBackend = open_backend(fake, refresh_every_tick=True)
     for n in range(100):
         backend.apply(n / 100, steady_tick())
     created = [i for i, _ in effect_calls(fake, "SDL_HapticNewEffect")]
@@ -60,9 +60,9 @@ def test_zero_frequency_silences_sine_and_keeps_period() -> None:
     assert (sine.period, sine.magnitude) == (167, 0)
 
 
-def test_sine_phase_continues_across_restarts() -> None:
+def test_refresh_every_tick_carries_sine_phase_tick_to_tick() -> None:
     fake = FakeSdl(stick())
-    backend = open_backend(fake)
+    backend = open_backend(fake, refresh_every_tick=True)
     backend.apply(0.0, [SineCommand(Axis.PITCH, 5.5067, 0.4)])
     assert last_effect(fake, fake.SDL_HAPTIC_SINE).periodic.phase == 0
     backend.apply(0.01, [SineCommand(Axis.PITCH, 5.5067, 0.4)])

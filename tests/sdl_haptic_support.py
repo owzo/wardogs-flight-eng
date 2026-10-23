@@ -17,13 +17,28 @@ STANDARD_AXES = HapticAxisMap.from_bindings(
 
 
 def open_backend(
-    fake: FakeSdl, length_s: float = 1.0, axis_map: HapticAxisMap = STANDARD_AXES
+    fake: FakeSdl,
+    length_s: float = 1.0,
+    axis_map: HapticAxisMap = STANDARD_AXES,
+    *,
+    refresh_every_tick: bool = False,
 ) -> SdlHapticBackend:
     return SdlHapticBackend(
         open_by_guid(GUID_STICK, fake),
         persistent_length_s=length_s,
         axis_map=axis_map,
+        refresh_every_tick=refresh_every_tick,
     )
+
+
+def per_effect(fake: FakeSdl, name: str) -> dict[int, int]:
+    """How many ``name`` calls each effect id received."""
+    counts: dict[int, int] = {}
+    for args in fake.args(name):
+        effect_id = args[0]
+        assert isinstance(effect_id, int)
+        counts[effect_id] = counts.get(effect_id, 0) + 1
+    return counts
 
 
 def effect_calls(fake: FakeSdl, name: str) -> list[tuple[int, HapticEffect]]:

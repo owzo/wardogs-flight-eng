@@ -7,8 +7,11 @@ Run with the base powered, plugged in and the stick released::
 The stick's input bindings come from ``WFE_PITCH_AXIS`` / ``WFE_ROLL_AXIS``
 (default 1 / 0) and ``WFE_PITCH_INVERT`` / ``WFE_ROLL_INVERT`` (``1`` to
 invert, default 0); the same bindings build the input and the haptic axis
-map, so index and sign are verified together. The test measures, in frame
-space through ``CompositeInput``:
+map, so index and sign are verified together. ``WFE_REFRESH_EVERY_TICK=1``
+builds the backend with ``refresh_every_tick=True`` (update and re-run every
+persistent effect every tick) to A/B it against the default, which uploads
+only on change and re-runs at half the effect length. The test measures, in
+frame space through ``CompositeInput``:
 
 1. a spring at centre +0.5 (coefficient 0.3) held 2 s brings pitch to
    +0.5 +/- 0.15 -- the physical direction depends on the binding;
@@ -122,7 +125,12 @@ def test_first_haptic_device_conforms() -> None:
     device = open_by_guid(guid)
     source = CompositeInput(_device_map(guid, pitch, roll), {"stick": device})
     axis_map = HapticAxisMap.from_bindings(pitch=pitch, roll=roll)
-    backend = SdlHapticBackend(device, persistent_length_s=1.0, axis_map=axis_map)
+    backend = SdlHapticBackend(
+        device,
+        persistent_length_s=1.0,
+        axis_map=axis_map,
+        refresh_every_tick=os.environ.get("WFE_REFRESH_EVERY_TICK") == "1",
+    )
     try:
         _measure(backend, source)
         backend.all_off()
