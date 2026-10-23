@@ -41,9 +41,10 @@ __all__ = [
 PROFILES_DIR: Final[Path] = Path(__file__).resolve().parents[1] / "profiles"
 """Directory holding the shipped airframe profiles."""
 
-Unit = Annotated[float, Field(ge=0, le=1)]
-SignedUnit = Annotated[float, Field(ge=-1, le=1)]
-NonNegative = Annotated[float, Field(ge=0)]
+Unit = Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]
+SignedUnit = Annotated[float, Field(ge=-1, le=1, allow_inf_nan=False)]
+NonNegative = Annotated[float, Field(ge=0, allow_inf_nan=False)]
+Positive = Annotated[float, Field(gt=0, allow_inf_nan=False)]
 
 
 class ProfileError(ValueError):
@@ -65,7 +66,7 @@ class Rotor(ProfileModel):
     base_amplitude: Unit
     deflection_factor: NonNegative
     spool_up_s: NonNegative
-    spool_down_rpm_per_s: Annotated[float, Field(gt=0)] | None
+    spool_down_rpm_per_s: Positive | None
 
 
 class Recoil(ProfileModel):
@@ -79,8 +80,8 @@ class Recoil(ProfileModel):
 class Safety(ProfileModel):
     """Backend force ceiling and the engine's stalled-tick watchdog."""
 
-    force_ceiling: Annotated[float, Field(gt=0, le=1)] = 0.6
-    watchdog_s: Annotated[float, Field(gt=0)] = 0.25
+    force_ceiling: Annotated[float, Field(gt=0, le=1, allow_inf_nan=False)] = 0.6
+    watchdog_s: Positive = 0.25
 
 
 class Profile(ProfileModel):

@@ -117,3 +117,26 @@ def test_device_map_parses_bindings() -> None:
     assert dm.axes["pitch"].invert is True
     assert dm.buttons[Button.FIRE].button == 0
     assert dm.calibration == Calibration()
+
+
+@pytest.mark.parametrize(
+    ("section", "key", "literal"),
+    [
+        ("safety", "watchdog_s", "Infinity"),
+        ("feel", "spring_coefficient", "NaN"),
+        ("feel", "trim_slew_s", "NaN"),
+        ("rotor", "spool_down_rpm_per_s", "Infinity"),
+        ("rotor", "spool_up_s", "Infinity"),
+    ],
+)
+def test_non_finite_floats_rejected_by_name(
+    tmp_path: Path, section: str, key: str, literal: str
+) -> None:
+    raw = _raw("havoc")
+    raw[section][key] = float(literal.lower().replace("infinity", "inf"))
+    text = json.dumps(raw)  # json writes the bare Infinity / NaN literals
+    assert literal in text
+    bad = tmp_path / "p.json"
+    bad.write_text(text)
+    with pytest.raises(ProfileError, match=f"{section}.{key}"):
+        load_profile(bad)
