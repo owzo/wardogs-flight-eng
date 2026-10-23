@@ -193,9 +193,10 @@ seconds escapes a hung tick (the release still runs). If the final message says
 pushes`, the release could not be confirmed: do what it says. If a device is
 unplugged mid-flight the forces are zeroed and the program exits with code 2.
 
-**Exit codes.** `0` success; `1` a usage, profile, scenario or configuration
-error (the message names the file and field); `2` a device is missing or was
-lost, or the base's release was not confirmed.
+**Exit codes.** `0` success (stopped by Ctrl+C or a tick limit); `1` a usage,
+profile, scenario or configuration error (the message names the file and
+field); `2` a device is missing or was lost, SDL or the force base failed
+during the run (`stopped: error`), or the base's release was not confirmed.
 
 Logs are written to `%LOCALAPPDATA%\WardogsFlightEng\logs\wardogs-flight-eng.log`
 and to stderr.

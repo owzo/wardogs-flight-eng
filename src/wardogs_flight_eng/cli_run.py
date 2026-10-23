@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Final
 
 from wardogs_flight_eng.cli_console import (
-    EXIT_CONFIG,
     EXIT_DEVICE,
     EXIT_OK,
     CliContext,
@@ -45,7 +44,7 @@ EXIT_BY_REASON: Final[dict[StopReason, int]] = {
     "stop": EXIT_OK,
     "max_ticks": EXIT_OK,
     "device_lost": EXIT_DEVICE,
-    "error": EXIT_CONFIG,
+    "error": EXIT_DEVICE,  # a failing tick is a runtime fault, not configuration
 }
 UNCONFIRMED: Final = (
     "the force base did not confirm its release; power-cycle it if it still pushes"

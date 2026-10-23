@@ -102,6 +102,14 @@ def test_device_lost_mid_run_exits_2_and_releases(profile: Path) -> None:
     _released(fake)
 
 
+def test_sdl_failure_mid_run_exits_2_and_releases(profile: Path) -> None:
+    fake = _bounded(stick(), pedals())
+    fake.fail.add("SDL_HapticRunEffect")  # apply raises SdlError on tick one
+    result = invoke(_run(profile), api=fake)
+    assert result.code == 2 and "stopped: error after 0 ticks" in result.output
+    _released(fake)
+
+
 def test_profiles_with_different_device_maps_exit_1(
     profile: Path, tmp_path: Path
 ) -> None:
