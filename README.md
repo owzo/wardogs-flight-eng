@@ -139,7 +139,7 @@ What the seven buttons do:
 | `fire` | hold | recoil pulses after the weapon's wind-up (profiles with a pilot weapon) |
 | `reload` | tap | silences recoil for the weapon's reload time |
 | `rotor_toggle` | tap | spools the rotor buzz down, or back up |
-| `profile_cycle` | tap | switches to the next profile given to `run` |
+| `profile_cycle` | tap | switches to the next profile given to `run`; forces drop to zero for the switch and a profile flown for the first time starts fresh (rotor buzz from 0, trim centre at origin; see "Run") |
 | `all_off` | tap | latches every force off; tap again to resume |
 
 ### 3. Calibrate
@@ -184,6 +184,13 @@ wardogs-flight-eng run --profile a.json --profile b.json
 Profiles in one run must have an identical `device_map` (`run` names the first
 field that differs), and the strictest `force_ceiling` and the shortest
 `watchdog_s` among them apply to all.
+
+Each profile keeps its own engine, and a switch carries nothing over but the
+`all_off` latch and which buttons are held. The first time you switch to a
+profile its engine starts fresh: the rotor buzz spools up from 0 and the
+trim centre is at origin (tap `trim_lock` again to re-trim). Switching back
+to a profile you already flew resumes it as you left it, including its trim
+centre and rotor speed at the moment you switched away.
 
 **Stopping.** Press Ctrl+C once: the loop finishes its tick, zeroes every
 force and releases the base, and prints `stopped: ...`. Further presses within
@@ -265,14 +272,16 @@ wardogs-flight-eng show-constants
 prints every airframe and weapon constant with its build. A value the game
 files do not give is `null` in the data and is displayed as
 `UNKNOWN - WARDOGS GAME VALUE REQUIRED`. Where the engine must have a number
-to run, it uses a stated placeholder, which is **not game data**. There are
-exactly two:
+to run, it uses a stated placeholder, which is **not game data for the
+airframe or weapon it is applied to**. There are exactly two:
 
 - **Spool-down rate, 850 rpm/s.** This is the Littlebird's game value
-  (`DA_ROT_03_Engine`). The Lakota and Havoc have no known value (their
-  `spool_down_rpm_per_s` shows as UNKNOWN), so on them `rotor_toggle` spools the
-  rotor buzz down at the Littlebird's rate until the real value is found. A
-  profile's `rotor.spool_down_rpm_per_s`, if you set it, overrides this.
+  (`DA_ROT_03_Engine`), not game data for the airframe it is applied to. The
+  Lakota and Havoc have no known value (their `spool_down_rpm_per_s` shows as
+  UNKNOWN), so on them `rotor_toggle` spools the rotor buzz down at the
+  Littlebird's rate until the real value is found; an INFO log line naming
+  the airframe says so each time such a profile is loaded. A profile's
+  `rotor.spool_down_rpm_per_s`, if you set it, overrides this.
 - **Shake multiplier, 1.0.** A weapon whose `shake_multiplier` is UNKNOWN
   (the rockets and the Lakota cannon) has its recoil gain scaled by 1.0, i.e.
   not scaled.
@@ -362,8 +371,14 @@ code task.
    as above and once with `WFE_REFRESH_EVERY_TICK=1` added, and compare the
    spring hold and the logged sine range: the buzz should be smooth in both,
    and if only the per-tick mode feels right, report it in an issue.
-4. Fly each profile and adjust only the `taste` values.
-5. Commit the tuned profiles.
+4. Fly each profile and adjust only the `taste` values. While `run` is
+   active, SDL holds the base's DirectInput device exclusively for force
+   feedback: the game still reads the stick, but no other program can play
+   force effects on the base until `run` exits.
+5. Unplug the base mid-run: expect `stopped: device_lost`, exit code 2 and no
+   residual force when it is plugged back in. If it still pushes,
+   power-cycle it and open an issue.
+6. Commit the tuned profiles.
 
 ## Licence
 

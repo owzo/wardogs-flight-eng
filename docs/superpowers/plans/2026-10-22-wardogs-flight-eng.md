@@ -35,11 +35,11 @@
 
 ```
 pyproject.toml  LICENSE  README.md  .gitignore
-data/wardogs_heli_constants.json
-profiles/{littlebird-miniguns,littlebird-rockets,lakota,havoc}.json
 packaging/wardogs-flight-eng.spec
 src/wardogs_flight_eng/
   __init__.py  __main__.py  cli.py
+  data/wardogs_heli_constants.json      (package data, shipped inside the .exe)
+  profiles/{littlebird-miniguns,littlebird-rockets,lakota,havoc}.json
   engine/
     frame.py       ControlFrame, Button (logical input per tick)
     commands.py    Axis, SpringCommand, SineCommand, PulseCommand, AllOffCommand
@@ -62,6 +62,7 @@ src/wardogs_flight_eng/
     logging_backend.py  LoggingBackend (JSONL)
     null_backend.py
     sdl_haptic.py  SdlHapticBackend, probe_primitives()
+    sdl_persistent.py  PersistentEffects, SineClock (upload on change, half-length re-run)
   runtime/
     loop.py        run_loop()
     plot.py        write_plot_html()
