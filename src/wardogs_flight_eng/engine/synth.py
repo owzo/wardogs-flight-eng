@@ -6,6 +6,7 @@ the all-off latch and the stalled-tick watchdog, dispatch taps, advance the
 models, then assemble springs, sines and any recoil for the tick.
 """
 
+import logging
 import math
 
 from wardogs_flight_eng.constants.model import Airframe, GameConstants, Weapon
@@ -25,17 +26,25 @@ from wardogs_flight_eng.engine.trim import TrimState
 from wardogs_flight_eng.engine.weapon import WeaponModel
 
 DEFAULT_SPOOL_DOWN_RPM_PER_S = 850.0
-"""Game spool-down (``DA_ROT_03_Engine``) used when nothing better is known."""
+"""Littlebird game spool-down (``DA_ROT_03_Engine``); not other airframes' data."""
+
+log = logging.getLogger(__name__)
 
 _PULSE_DUTY = 0.5
 """Recoil pulse length as a fraction of the interval between rounds."""
 
 
 def _spool_down(profile: Profile, airframe: Airframe) -> float:
-    """Profile override, else the airframe's constant, else the game default."""
+    """Profile override, else the airframe's constant, else the placeholder."""
     for rate in (profile.rotor.spool_down_rpm_per_s, airframe.spool_down_rpm_per_s):
         if rate is not None:
             return rate
+    log.info(
+        "%s: spool-down rate unknown; using %g rpm/s, the Littlebird's game "
+        "value, not this airframe's",
+        profile.airframe,
+        DEFAULT_SPOOL_DOWN_RPM_PER_S,
+    )
     return DEFAULT_SPOOL_DOWN_RPM_PER_S
 
 

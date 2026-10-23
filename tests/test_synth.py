@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 
 from wardogs_flight_eng.constants.loader import load_constants
@@ -236,3 +238,22 @@ def test_non_finite_or_negative_dt_fails_closed_and_freezes_state(
         (c.frequency_hz, c.magnitude) for c in expected if isinstance(c, SineCommand)
     ]
     assert all(f > 0 for f, _ in sines)  # the rotor really was spooling
+
+
+def test_spool_down_placeholder_is_logged_once_for_an_airframe_without_one(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.INFO, logger="wardogs_flight_eng.engine.synth"):
+        engine_for("lakota")
+    notes = [r.getMessage() for r in caplog.records if "spool-down" in r.getMessage()]
+    assert len(notes) == 1
+    assert "lakota" in notes[0] and "the Littlebird's game value" in notes[0]
+    assert "not this airframe's" in notes[0]
+
+
+def test_spool_down_placeholder_not_logged_for_the_littlebird(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.INFO, logger="wardogs_flight_eng.engine.synth"):
+        engine_for("littlebird-miniguns")
+    assert not [r for r in caplog.records if "spool-down" in r.getMessage()]
