@@ -1,19 +1,17 @@
 """``run``: drive the force-feedback base from the bound devices until stopped.
 
 Everything that can be checked from the profiles alone is checked before any
-device is opened. Opened joysticks are always closed again; the force backend
-is zeroed and released by ``run_loop``'s teardown (or here, if the loop never
-starts).
+device is opened (``cli_run_checks``). Opened joysticks are always closed
+again. The force backend is zeroed and released by ``run_loop``'s teardown,
+or here if the loop never took it over; the final message claims a release
+only if ``close`` actually completed (``cli_interrupt.ReleaseWatch``).
 """
 
 import argparse
 import logging
-import signal
-import threading
-from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
-from types import FrameType
 from typing import Final
 
 from wardogs_flight_eng.cli_console import (
@@ -24,9 +22,10 @@ from wardogs_flight_eng.cli_console import (
     CliError,
 )
 from wardogs_flight_eng.cli_devices import close_devices, open_devices
+from wardogs_flight_eng.cli_interrupt import ReleaseWatch, ctrl_c_requests_stop
 from wardogs_flight_eng.cli_profiles import load_checked_profile
+from wardogs_flight_eng.cli_run_checks import haptic_axes, shared_map
 from wardogs_flight_eng.constants.loader import load_constants
-from wardogs_flight_eng.engine.device_map import DeviceMap
 from wardogs_flight_eng.engine.profile import Profile
 from wardogs_flight_eng.engine.synth import FlightEngine
 from wardogs_flight_eng.inputs.composite import CompositeInput
@@ -48,45 +47,15 @@ EXIT_BY_REASON: Final[dict[StopReason, int]] = {
     "device_lost": EXIT_DEVICE,
     "error": EXIT_CONFIG,
 }
+UNCONFIRMED: Final = (
+    "the force base did not confirm its release; power-cycle it if it still pushes"
+)
 
 
-def _shared_map(paths: Sequence[Path], profiles: Sequence[Profile]) -> DeviceMap:
-    """The one device map every profile shares; it must bind something."""
-    first = profiles[0].device_map
-    for path, profile in zip(paths[1:], profiles[1:], strict=True):
-        if profile.device_map != first:
-            raise CliError(
-                f"profile {path}: device_map differs from {paths[0]}; every "
-                "profile in one run must share one device_map"
-            )
-    if not first.devices or not first.axes:
-        raise CliError(
-            f"profile {paths[0]}: device_map binds no devices or axes. Run "
-            "`wardogs-flight-eng list-devices --live` to identify your devices, "
-            "fill device_map in the profile, then run "
-            f"`wardogs-flight-eng calibrate --profile {paths[0]}`"
-        )
-    return first
-
-
-def _haptic_axes(device_map: DeviceMap) -> tuple[str, HapticAxisMap]:
-    """The force-feedback device's name and its pitch/roll haptic axes."""
-    for channel in ("pitch", "roll"):
-        if channel not in device_map.axes:
-            raise CliError(
-                f"device_map.axes.{channel}: not bound; the force-feedback "
-                "base must supply pitch and roll"
-            )
-    pitch, roll = device_map.axes["pitch"], device_map.axes["roll"]
-    if roll.device != pitch.device:
-        raise CliError(
-            f"device_map.axes.roll: bound to {roll.device!r} but pitch is on "
-            f"{pitch.device!r}; both must be axes of the force-feedback base"
-        )
-    try:
-        return pitch.device, HapticAxisMap.from_bindings(pitch=pitch, roll=roll)
-    except ValueError as err:
-        raise CliError(f"device_map.axes.pitch/roll: {err}") from err
+@dataclass(frozen=True, slots=True)
+class _Outcome:
+    result: LoopResult | None  # None: interrupted
+    released: bool
 
 
 def _force_backend(
@@ -94,9 +63,9 @@ def _force_backend(
     device: SdlDevice,
     axis_map: HapticAxisMap,
     profiles: Sequence[Profile],
-) -> ForceBackend:
+    watchdog_s: float,
+) -> ReleaseWatch:
     """Clamp -> [tee ->] SDL haptic, with the strictest ceiling of the profiles."""
-    watchdog_s = profiles[0].safety.watchdog_s
     output: ForceBackend = SdlHapticBackend(
         device,
         axis_map=axis_map,
@@ -109,42 +78,31 @@ def _force_backend(
             output.close()
             raise CliError(f"--log {args.log}: {err.strerror or err}") from err
     ceiling = min(profile.safety.force_ceiling for profile in profiles)
-    return ClampedBackend(output, ceiling=ceiling)
+    return ReleaseWatch(ClampedBackend(output, ceiling=ceiling))
 
 
-@contextmanager
-def _ctrl_c_requests_stop() -> Iterator[threading.Event]:
-    """First Ctrl+C asks the loop to stop after its tick; a second interrupts."""
-    requested = threading.Event()
-
-    def on_ctrl_c(_signum: int, _frame: FrameType | None) -> None:
-        requested.set()
-        signal.signal(signal.SIGINT, signal.default_int_handler)
-        log.info("Ctrl+C: stopping after this tick (press again to interrupt)")
-
-    if threading.current_thread() is not threading.main_thread():
-        yield requested  # signals reach only the main thread
-        return
-    previous = signal.getsignal(signal.SIGINT)
-    signal.signal(signal.SIGINT, on_ctrl_c)
+def _close_unowned(backend: ReleaseWatch) -> None:
+    """Release a backend the loop never took over (it failed before starting)."""
     try:
-        yield requested
-    finally:
-        restored = signal.default_int_handler if previous is None else previous
-        signal.signal(signal.SIGINT, restored)
+        backend.close()
+    except Exception:
+        log.exception("closing the force backend failed")
 
 
 def _fly(
     args: argparse.Namespace,
     engines: Sequence[FlightEngine],
     source: CompositeInput,
-    backend: ForceBackend,
+    build: Callable[[], ReleaseWatch],
     watchdog_s: float,
-) -> LoopResult | None:
-    """Run the loop; ``None`` if it was interrupted (teardown still ran)."""
-    with _ctrl_c_requests_stop() as stop:
-        try:
-            return run_loop(
+) -> _Outcome:
+    """Build the backend and run the loop; the backend is closed on every path."""
+    backend: ReleaseWatch | None = None
+    result: LoopResult | None = None
+    try:
+        backend = build()
+        with ctrl_c_requests_stop() as stop:
+            result = run_loop(
                 engines,
                 source,
                 backend,
@@ -152,17 +110,39 @@ def _fly(
                 watchdog_s=watchdog_s,
                 stop=stop.is_set,
             )
-        except KeyboardInterrupt:
-            log.info("loop interrupted; forces zeroed and device released")
-            return None
+    except KeyboardInterrupt:
+        log.warning("run interrupted")
+    finally:
+        if backend is not None and not backend.close_attempted:
+            _close_unowned(backend)
+    return _Outcome(result, backend is not None and backend.released)
+
+
+def _report(ctx: CliContext, outcome: _Outcome) -> int:
+    result = outcome.result
+    if result is None:
+        if outcome.released:
+            ctx.console.line("stopped: interrupted; forces off, base released")
+            return EXIT_OK
+        ctx.console.line(f"stopped: interrupted; {UNCONFIRMED}")
+        return EXIT_DEVICE
+    ctx.console.line(
+        f"stopped: {result.stopped_by} after {result.ticks} ticks "
+        f"(active profile {result.active_profile})"
+    )
+    if not outcome.released:
+        ctx.console.line(f"warning: {UNCONFIRMED}")
+        return EXIT_DEVICE
+    return EXIT_BY_REASON[result.stopped_by]
 
 
 def run_command(args: argparse.Namespace, ctx: CliContext) -> int:
     paths: list[Path] = args.profile
     constants = load_constants()
     profiles = [load_checked_profile(path, constants) for path in paths]
-    device_map = _shared_map(paths, profiles)
-    base, axis_map = _haptic_axes(device_map)
+    device_map = shared_map(paths, profiles)
+    base, axis_map = haptic_axes(device_map)
+    watchdog_s = min(profile.safety.watchdog_s for profile in profiles)
     engines = [FlightEngine(profile, constants) for profile in profiles]
     devices = open_devices(device_map, ctx.api)
     try:
@@ -172,17 +152,15 @@ def run_command(args: argparse.Namespace, ctx: CliContext) -> int:
                 f"({devices[base].name}) has no force feedback"
             )
         source = CompositeInput(device_map, devices)
-        backend = _force_backend(args, devices[base], axis_map, profiles)
         names = ", ".join(profile.name for profile in profiles)
         ctx.console.line(f"running {names} at {args.rate:g} Hz; Ctrl+C to stop")
-        result = _fly(args, engines, source, backend, profiles[0].safety.watchdog_s)
+        outcome = _fly(
+            args,
+            engines,
+            source,
+            lambda: _force_backend(args, devices[base], axis_map, profiles, watchdog_s),
+            watchdog_s,
+        )
     finally:
         close_devices(devices)
-    if result is None:
-        ctx.console.line("stopped: interrupted; forces off, devices released")
-        return EXIT_OK
-    ctx.console.line(
-        f"stopped: {result.stopped_by} after {result.ticks} ticks "
-        f"(active profile {result.active_profile})"
-    )
-    return EXIT_BY_REASON[result.stopped_by]
+    return _report(ctx, outcome)

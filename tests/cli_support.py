@@ -13,7 +13,7 @@ from sdl_support import GUID_PEDALS, GUID_STICK, FakeJoystick, FakeSdl
 
 from wardogs_flight_eng.cli import main
 from wardogs_flight_eng.engine.profile import PROFILES_DIR
-from wardogs_flight_eng.inputs.sdl_api import SdlApi
+from wardogs_flight_eng.inputs.sdl_api import HapticEffect, SdlApi
 
 PACKAGED = PROFILES_DIR / "littlebird-miniguns.json"
 
@@ -114,6 +114,48 @@ class TickingSdl(FakeSdl):
         self.updates += 1
         if self.updates == self._after:
             self._then(self)
+
+
+class TeardownSdl(TickingSdl):
+    """A ``TickingSdl`` whose first ``SDL_HapticStopAll`` and first
+    ``SDL_HapticClose`` each run a hook before doing their work."""
+
+    def __init__(
+        self,
+        *joysticks: FakeJoystick,
+        after: int,
+        then: Callable[["TickingSdl"], None],
+        on_stop_all: Callable[[], None] | None = None,
+        on_close: Callable[[], None] | None = None,
+    ) -> None:
+        super().__init__(*joysticks, after=after, then=then)
+        self._on_stop_all = on_stop_all
+        self._on_close = on_close
+
+    def SDL_HapticStopAll(self, haptic: object) -> int:
+        hook, self._on_stop_all = self._on_stop_all, None
+        if hook is not None:
+            hook()
+        return super().SDL_HapticStopAll(haptic)
+
+    def SDL_HapticClose(self, haptic: object) -> None:
+        hook, self._on_close = self._on_close, None
+        if hook is not None:
+            hook()
+        super().SDL_HapticClose(haptic)
+
+
+def interrupt() -> None:
+    raise KeyboardInterrupt
+
+
+def spring_lengths(fake: FakeSdl) -> set[int]:
+    """Lengths (ms) of every spring effect the run created."""
+    return {
+        effect.condition.length
+        for _, effect in fake.args("SDL_HapticNewEffect")
+        if isinstance(effect, HapticEffect) and effect.type == fake.SDL_HAPTIC_SPRING
+    }
 
 
 def joysticks_released(fake: FakeSdl) -> bool:

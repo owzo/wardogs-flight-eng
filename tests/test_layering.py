@@ -12,9 +12,11 @@ CLI_MODULES = {
         "cli_calibrate",
         "cli_console",
         "cli_devices",
+        "cli_interrupt",
         "cli_offline",
         "cli_profiles",
         "cli_run",
+        "cli_run_checks",
     )
 }
 

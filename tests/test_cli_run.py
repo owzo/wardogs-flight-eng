@@ -2,7 +2,9 @@
 
 import json
 import signal
+from collections.abc import Callable, Iterator
 from pathlib import Path
+from types import FrameType
 
 import pytest
 from cli_support import (
@@ -48,14 +50,30 @@ def _released(fake: FakeSdl) -> None:
     assert names.index("SDL_HapticClose") < len(names) - 2
 
 
+@pytest.fixture
+def sentinel_sigint() -> Iterator[Callable[[int, FrameType | None], None]]:
+    """Install a recognisable SIGINT handler for the test; restore the old one."""
+
+    def sentinel(_signum: int, _frame: FrameType | None) -> None:
+        raise AssertionError("the run's own Ctrl+C handler was not installed")
+
+    previous = signal.signal(signal.SIGINT, sentinel)
+    try:
+        yield sentinel
+    finally:
+        signal.signal(signal.SIGINT, previous)
+
+
 def test_ctrl_c_stops_cleanly_and_tees_the_force_log(
-    profile: Path, tmp_path: Path
+    profile: Path,
+    tmp_path: Path,
+    sentinel_sigint: Callable[[int, FrameType | None], None],
 ) -> None:
     log = tmp_path / "logs" / "forces.jsonl"
     fake = TickingSdl(stick(), pedals(), after=10, then=press_ctrl_c)
     result = invoke(_run(profile, "--log", str(log)), api=fake)
     assert result.code == 0 and "stopped: stop after" in result.output
-    assert signal.getsignal(signal.SIGINT) is signal.default_int_handler
+    assert signal.getsignal(signal.SIGINT) is sentinel_sigint
     rows = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
     assert {"spring", "sine"} <= {row["kind"] for row in rows}
     assert rows[-1]["kind"] == "all_off"
@@ -91,7 +109,19 @@ def test_profiles_with_different_device_maps_exit_1(
     fake = _bounded(stick(), pedals())
     result = invoke(_run(profile, "--profile", str(second)), api=fake)
     assert result.code == 1 and "other.json" in result.output
+    assert "device_map.axes.collective.axis" in result.output
     assert fake.count("SDL_JoystickOpen") == 0
+
+
+def test_calibration_drift_between_profiles_names_the_key(
+    profile: Path, tmp_path: Path
+) -> None:
+    other = bound_document()
+    other["device_map"]["calibration"]["collective_bottom_raw"] = -0.9
+    second = write_profile(tmp_path / "drift.json", other)
+    result = invoke(_run(profile, "--profile", str(second)), api=_bounded())
+    assert result.code == 1
+    assert "device_map.calibration.collective_bottom_raw" in result.output
 
 
 def test_two_profiles_sharing_a_map_run(profile: Path, tmp_path: Path) -> None:

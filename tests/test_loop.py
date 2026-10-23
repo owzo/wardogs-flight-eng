@@ -230,6 +230,20 @@ def test_interrupt_propagates_after_teardown(
     assert backend.all_off_calls == 1 and backend.closed
 
 
+def test_interrupt_inside_teardown_all_off_still_closes(
+    engine: list[FlightEngine], source: CompositeInput
+) -> None:
+    class InterruptingAllOff(RecordingBackend):
+        def all_off(self) -> None:
+            super().all_off()
+            raise KeyboardInterrupt
+
+    backend = InterruptingAllOff()
+    with pytest.raises(KeyboardInterrupt):
+        run(engine, source, backend, max_ticks=1)
+    assert backend.all_off_calls == 1 and backend.closed
+
+
 def test_sleeps_until_the_next_slot_and_never_negative(
     engine: list[FlightEngine],
     source: CompositeInput,

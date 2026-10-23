@@ -118,15 +118,21 @@ def _invalid_arguments(engines: Sequence[FlightEngine], rate_hz: float) -> str |
 
 
 def _teardown(backend: ForceBackend) -> None:
-    """Zero forces then release the device; one failing never skips the other."""
+    """Zero forces then release the device; one failing never skips the other.
+
+    An ``Exception`` from either step is logged. A ``BaseException`` (an
+    interrupt) from ``all_off`` still lets ``close`` run, then propagates.
+    """
     try:
-        backend.all_off()
-    except Exception:
-        log.exception("backend all_off failed during teardown")
-    try:
-        backend.close()
-    except Exception:
-        log.exception("backend close failed during teardown")
+        try:
+            backend.all_off()
+        except Exception:
+            log.exception("backend all_off failed during teardown")
+    finally:
+        try:
+            backend.close()
+        except Exception:
+            log.exception("backend close failed during teardown")
 
 
 def run_loop(
