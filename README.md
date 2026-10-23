@@ -36,11 +36,6 @@ Version 0.1.0 (v1).
 
 ## Install
 
-**Everyone else:** use `wardogs-flight-eng.exe`, a single file that needs no
-Python (take it from a release once one is published, or build it yourself as
-shown below). Put it in a folder of your own and run it from a terminal there. The commands below write
-`wardogs-flight-eng`; with the `.exe` type `wardogs-flight-eng.exe`.
-
 **Developers:** install [uv](https://docs.astral.sh/uv/), then
 
 ```
@@ -57,10 +52,20 @@ yourself:
 uv run pyinstaller packaging/wardogs-flight-eng.spec
 ```
 
-The result is `dist/wardogs-flight-eng.exe`. The shipped profiles are the four
-JSON files in `src/wardogs_flight_eng/profiles/` of the repository: copy the
-one you want out of there into a folder of your own and edit the copy. (The
-`.exe` carries them inside itself, where you cannot edit them.)
+The result is `dist/wardogs-flight-eng.exe`.
+
+**Everyone else:** use `wardogs-flight-eng.exe`, a single file that needs no
+Python (take it from a release once one is published, or build it yourself as
+above). Put it in a folder of your own and run it from a terminal there. The
+commands below write `wardogs-flight-eng`; with the `.exe` type
+`wardogs-flight-eng.exe`.
+
+The shipped profiles are the four JSON files in
+`src/wardogs_flight_eng/profiles/` of the repository: copy the one you want out
+of there into a folder of your own and edit the copy. (The `.exe` carries them
+inside itself, where you cannot edit them.) If you only have the `.exe`,
+download the repository as a ZIP from its page and take the profiles from
+`src/wardogs_flight_eng/profiles/` and the scenario from `tests/scenarios/`.
 
 ## First run
 
@@ -257,9 +262,26 @@ wardogs-flight-eng show-constants
 ```
 
 prints every airframe and weapon constant with its build. A value the game
-files do not give is `null` in the data and shown as
-`UNKNOWN - WARDOGS GAME VALUE REQUIRED`; the engine never substitutes a
-number for it.
+files do not give is `null` in the data and is displayed as
+`UNKNOWN - WARDOGS GAME VALUE REQUIRED`. Where the engine must have a number
+to run, it uses a stated placeholder, which is **not game data**. There are
+exactly two:
+
+- **Spool-down rate, 850 rpm/s.** This is the Littlebird's game value
+  (`DA_ROT_03_Engine`). The Lakota and Havoc have no known value (their
+  `spool_down_rpm_per_s` shows as UNKNOWN), so on them `rotor_toggle` spools the
+  rotor buzz down at the Littlebird's rate until the real value is found. A
+  profile's `rotor.spool_down_rpm_per_s`, if you set it, overrides this.
+- **Shake multiplier, 1.0.** A weapon whose `shake_multiplier` is UNKNOWN
+  (the rockets and the Lakota cannon) has its recoil gain scaled by 1.0, i.e.
+  not scaled.
+
+**`verify_in_game`.** Each profile has a `verify_in_game` list naming values the
+owner must confirm in the game because the game files do not settle them. It is
+empty for most profiles; the Lakota profile lists `pilot_weapon` (which of the
+Lakota's weapons the pilot seat fires is not stated in the game files, so the
+profile assumes its rockets). Check the entries, correct the profile if the game
+disagrees, and then empty the list.
 
 **Contributing a constant.** Open an issue or pull request giving, for each
 value: the game asset path, the property name, the Steam build id you read it
