@@ -81,6 +81,25 @@ def test_ctrl_c_stops_cleanly_and_tees_the_force_log(
     _released(fake)
 
 
+class CtrlCWhileOpeningHaptic(TickingSdl):
+    """Ctrl+C arrives just after the haptic opened, inside the backend build."""
+
+    def SDL_HapticOpenFromJoystick(self, joystick: object) -> object | None:
+        haptic = super().SDL_HapticOpenFromJoystick(joystick)
+        signal.raise_signal(signal.SIGINT)
+        return haptic
+
+
+def test_ctrl_c_while_the_backend_opens_stops_at_zero_ticks_and_releases(
+    profile: Path, sentinel_sigint: Callable[[int, FrameType | None], None]
+) -> None:
+    fake = CtrlCWhileOpeningHaptic(stick(), pedals(), after=200, then=detach_all)
+    result = invoke(_run(profile), api=fake)
+    assert result.code == 0 and "stopped: stop after 0 ticks" in result.output
+    assert signal.getsignal(signal.SIGINT) is sentinel_sigint
+    _released(fake)
+
+
 def test_force_log_records_the_clamped_commands(profile: Path, tmp_path: Path) -> None:
     document = bound_document()
     document["feel"]["spring_coefficient"] = 0.9

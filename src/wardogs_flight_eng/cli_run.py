@@ -95,12 +95,17 @@ def _fly(
     build: Callable[[], ReleaseWatch],
     watchdog_s: float,
 ) -> _Outcome:
-    """Build the backend and run the loop; the backend is closed on every path."""
+    """Build the backend and run the loop; the backend is closed on every path.
+
+    The Ctrl+C handler is installed before the backend is built, so a press
+    while the haptic opens only requests the stop: the loop then runs zero
+    ticks and its teardown releases the base instead of leaking it.
+    """
     backend: ReleaseWatch | None = None
     result: LoopResult | None = None
     try:
-        backend = build()
         with ctrl_c_requests_stop() as stop:
+            backend = build()
             result = run_loop(
                 engines,
                 source,
