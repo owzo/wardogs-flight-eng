@@ -30,11 +30,12 @@ def quiet_logging(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cli, "setup_logging", lambda verbose: None)
 
 
-def _profile(tmp_path: Path, name: str, **safety: float) -> Path:
+def _profile(tmp_path: Path, name: str, spring: float = 0.9, **safety: float) -> Path:
+    """A stiff profile; its own ceiling (default 1.0) admits ``spring``."""
     document: dict[str, Any] = bound_document()
     document["name"] = name
-    document["feel"]["spring_coefficient"] = 0.9
-    document["safety"].update(safety)
+    document["feel"]["spring_coefficient"] = spring
+    document["safety"].update({"force_ceiling": 1.0, **safety})
     return write_profile(tmp_path / f"{name}.json", document)
 
 
@@ -90,8 +91,12 @@ def test_a_ctrl_c_after_the_grace_deadline_interrupts() -> None:
 
 
 def test_lowest_force_ceiling_of_all_profiles_clamps(tmp_path: Path) -> None:
-    first = _profile(tmp_path, "first", force_ceiling=0.6)
-    second = _profile(tmp_path, "second", force_ceiling=0.3)
+    first = _profile(tmp_path, "first", force_ceiling=1.0)
+    soft = bound_document()  # every gain within its own 0.3 ceiling
+    soft["name"] = "second"
+    soft["feel"]["spring_coefficient"] = soft["recoil"]["amplitude"] = 0.3
+    soft["safety"]["force_ceiling"] = 0.3
+    second = write_profile(tmp_path / "second.json", soft)
     log = tmp_path / "forces.jsonl"
     fake = TickingSdl(stick(), pedals(), after=10, then=press_ctrl_c)
     assert invoke(_run(first, second, log=log), api=fake).code == 0

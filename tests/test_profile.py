@@ -95,7 +95,7 @@ def test_shipped_values_match_owner_taste() -> None:
     assert lakota.verify_in_game == ["pilot_weapon"]
     assert lakota.feel.spring_coefficient == 0.5 and lakota.feel.roll_scale == 0.5
     assert lakota.feel.deadband == 0.02 and lakota.feel.trim_slew_s == 0.3
-    assert lakota.rotor.base_amplitude == 0.3 and lakota.recoil.amplitude == 0.8
+    assert lakota.rotor.base_amplitude == 0.3 and lakota.recoil.amplitude == 0.6
     assert lakota.rotor.spool_up_s == 3.0 and lakota.rotor.deflection_factor == 0.5
     assert lakota.rotor.spool_down_rpm_per_s is None
     assert lakota.recoil.rocket_kick == (0.0, -1.0)
@@ -103,6 +103,7 @@ def test_shipped_values_match_owner_taste() -> None:
     assert lakota.safety.force_ceiling == 0.6 and lakota.safety.watchdog_s == 0.25
     havoc = load_profile(PROFILES / "havoc.json")
     assert havoc.pilot_weapon is None and havoc.recoil.amplitude == 0
+    assert havoc.feel.spring_coefficient == 0.6
 
 
 def test_device_map_parses_bindings() -> None:
@@ -140,3 +141,31 @@ def test_non_finite_floats_rejected_by_name(
     bad.write_text(text)
     with pytest.raises(ProfileError, match=f"{section}.{key}"):
         load_profile(bad)
+
+
+@pytest.mark.parametrize(
+    ("section", "key"),
+    [
+        ("feel", "spring_coefficient"),
+        ("rotor", "base_amplitude"),
+        ("recoil", "amplitude"),
+        ("recoil", "shake_amplitude"),
+    ],
+)
+def test_gain_above_force_ceiling_rejected_by_name(
+    tmp_path: Path, section: str, key: str
+) -> None:
+    raw = _raw("lakota")
+    raw["safety"]["force_ceiling"] = 0.65
+    raw[section][key] = 0.7
+    bad = tmp_path / "p.json"
+    bad.write_text(json.dumps(raw))
+    profile = load_profile(bad)
+    with pytest.raises(ProfileError, match=rf"{section}\.{key} 0\.7 is above"):
+        profile.validate_against(load_constants())
+
+
+def test_gain_equal_to_force_ceiling_is_allowed() -> None:
+    havoc = load_profile(PROFILES / "havoc.json")
+    assert havoc.feel.spring_coefficient == havoc.safety.force_ceiling
+    havoc.validate_against(load_constants())

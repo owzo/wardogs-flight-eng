@@ -180,7 +180,7 @@ def test_rocket_pulse_kicks_rearward_on_pitch() -> None:
     e = engine_for("lakota")
     cmds = e.step(0.01, frame(0, 0, 0.5, 0, Button.FIRE))
     pulses = {c.axis: c for c in cmds if isinstance(c, PulseCommand)}
-    assert pulses[Axis.PITCH].magnitude == pytest.approx(-0.8)
+    assert pulses[Axis.PITCH].magnitude == pytest.approx(-0.6)
     assert pulses[Axis.ROLL].magnitude == 0
     assert pulses[Axis.PITCH].duration_s == pytest.approx(0.5 / (500 / 60))
 

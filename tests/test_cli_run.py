@@ -81,13 +81,15 @@ def test_ctrl_c_stops_cleanly_and_tees_the_force_log(
     _released(fake)
 
 
-def test_force_log_records_the_clamped_commands(tmp_path: Path) -> None:
+def test_force_log_records_the_clamped_commands(profile: Path, tmp_path: Path) -> None:
     document = bound_document()
     document["feel"]["spring_coefficient"] = 0.9
-    profile = write_profile(tmp_path / "stiff.json", document)
+    document["safety"]["force_ceiling"] = 1.0
+    stiff = write_profile(tmp_path / "stiff.json", document)
     log = tmp_path / "forces.jsonl"
     fake = TickingSdl(stick(), pedals(), after=10, then=press_ctrl_c)
-    assert invoke(_run(profile, "--log", str(log)), api=fake).code == 0
+    argv = _run(stiff, "--profile", str(profile), "--log", str(log))
+    assert invoke(argv, api=fake).code == 0  # the 0.6 ceiling of `profile` rules
     rows = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
     springs = [row for row in rows if row["kind"] == "spring"]
     assert springs and max(row["coefficient"] for row in springs) <= 0.6

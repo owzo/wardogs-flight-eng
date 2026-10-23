@@ -14,7 +14,7 @@
     }
   },
   "feel": {
-    "spring_coefficient": 0.65,
+    "spring_coefficient": 0.6,
     "roll_scale": 0.5,
     "deadband": 0.02,
     "trim_slew_s": 0.3

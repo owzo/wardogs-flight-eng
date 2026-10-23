@@ -28,7 +28,7 @@
     "spool_down_rpm_per_s": null
   },
   "recoil": {
-    "amplitude": 0.8,
+    "amplitude": 0.6,
     "rocket_kick": [
       0.0,
       -1.0

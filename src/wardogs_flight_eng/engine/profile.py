@@ -99,7 +99,9 @@ class Profile(ProfileModel):
     taste: list[str]
 
     def validate_against(self, constants: GameConstants) -> None:
-        """Raise ``ProfileError`` unless the airframe and weapon are game keys."""
+        """Raise ``ProfileError`` unless the airframe and weapon are game keys
+        and no force gain exceeds ``safety.force_ceiling``."""
+        self._check_gains_within_ceiling()
         if self.airframe not in constants.airframes:
             raise ProfileError(
                 f"profile {self.name!r}: airframe {self.airframe!r} is not one of "
@@ -112,6 +114,22 @@ class Profile(ProfileModel):
                 f"profile {self.name!r}: pilot_weapon {self.pilot_weapon!r} is not "
                 f"one of {sorted(constants.weapons)}"
             )
+
+    def _check_gains_within_ceiling(self) -> None:
+        """Every gain the backend would clamp anyway is a profile error instead."""
+        ceiling = self.safety.force_ceiling
+        gains = {
+            "feel.spring_coefficient": self.feel.spring_coefficient,
+            "rotor.base_amplitude": self.rotor.base_amplitude,
+            "recoil.amplitude": self.recoil.amplitude,
+            "recoil.shake_amplitude": self.recoil.shake_amplitude,
+        }
+        for field, value in gains.items():
+            if value > ceiling:
+                raise ProfileError(
+                    f"profile {self.name!r}: {field} {value} is above "
+                    f"safety.force_ceiling {ceiling}"
+                )
 
 
 def _describe(err: ValidationError) -> str:
