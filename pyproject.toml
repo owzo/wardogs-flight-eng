@@ -20,6 +20,7 @@ dev = [
     "pytest",
     "ruff",
     "mypy",
+    "pyinstaller>=6.22.3",
 ]
 
 [build-system]
