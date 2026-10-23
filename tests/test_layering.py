@@ -5,12 +5,25 @@ from pathlib import Path
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "src" / "wardogs_flight_eng"
 
+CLI_MODULES = {
+    f"wardogs_flight_eng.{name}"
+    for name in (
+        "cli",
+        "cli_calibrate",
+        "cli_console",
+        "cli_devices",
+        "cli_offline",
+        "cli_profiles",
+        "cli_run",
+    )
+}
+
 FORBIDDEN = {
     "engine": {
         "wardogs_flight_eng.inputs",
         "wardogs_flight_eng.outputs",
         "wardogs_flight_eng.runtime",
-        "wardogs_flight_eng.cli",
+        *CLI_MODULES,
         "sdl2",
     },
     "constants": {
@@ -18,7 +31,7 @@ FORBIDDEN = {
         "wardogs_flight_eng.inputs",
         "wardogs_flight_eng.outputs",
         "wardogs_flight_eng.runtime",
-        "wardogs_flight_eng.cli",
+        *CLI_MODULES,
         "sdl2",
     },
 }
