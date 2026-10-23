@@ -103,14 +103,15 @@ class FlightEngine:
     def step(self, dt: float, frame: ControlFrame) -> list[Command]:
         """Advance ``dt`` seconds and return this tick's commands.
 
-        A latched ALL_OFF or a stalled tick (``dt > safety.watchdog_s``)
+        A latched ALL_OFF, or a ``dt`` outside ``0..safety.watchdog_s`` (a
+        stalled tick, a negative gap, NaN or infinity: the gate fails closed),
         returns exactly ``[AllOffCommand()]`` and advances no model.
         """
         taps = frame.held - self._previous_held
         self._previous_held = frame.held
         if Button.ALL_OFF in taps:
             self._all_off = not self._all_off
-        if self._all_off or dt > self._profile.safety.watchdog_s:
+        if self._all_off or not (0.0 <= dt <= self._profile.safety.watchdog_s):
             return [AllOffCommand()]
         self._dispatch(taps, frame)
         self._trim.step(dt)

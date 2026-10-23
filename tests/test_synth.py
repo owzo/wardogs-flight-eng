@@ -213,3 +213,26 @@ def test_primed_buttons_are_not_taps() -> None:
     e.prime_buttons(frozenset({Button.ALL_OFF}))
     assert e.step(0.01, frame(0, 0, 0, 0, Button.ALL_OFF)) == [AllOffCommand()]
     assert e.all_off is True  # held across the handoff: no toggle
+
+
+@pytest.mark.parametrize("bad_dt", [float("nan"), float("inf"), -0.01])
+def test_non_finite_or_negative_dt_fails_closed_and_freezes_state(
+    bad_dt: float,
+) -> None:
+    held = frame(0.6, 0.4, 1.0, 0, Button.TRIM_LOCK)
+    gated, reference = (
+        engine_for("littlebird-miniguns"),
+        engine_for("littlebird-miniguns"),
+    )
+    for e in (gated, reference):
+        e.step(0.01, held)  # trim lock tap; trim slewing, rotor spooling up
+    assert gated.step(bad_dt, held) == [AllOffCommand()]
+    assert gated.all_off is False
+    after, expected = gated.step(0.01, held), reference.step(0.01, held)
+    centers = [c.center for c in after if isinstance(c, SpringCommand)]
+    assert centers == [c.center for c in expected if isinstance(c, SpringCommand)]
+    sines = [(c.frequency_hz, c.magnitude) for c in after if isinstance(c, SineCommand)]
+    assert sines == [
+        (c.frequency_hz, c.magnitude) for c in expected if isinstance(c, SineCommand)
+    ]
+    assert all(f > 0 for f, _ in sines)  # the rotor really was spooling
