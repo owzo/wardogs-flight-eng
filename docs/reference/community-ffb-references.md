@@ -220,6 +220,31 @@ stick free, re-engage → new centre); steady high-frequency buzz that changes
 with rotor speed and airframe stress; SAS corrections isolated from the
 stick. This is the feel model the spec adopts (tap-to-lock variant).
 
+### Season 2 preset by Captain Shinypants (Wardogs forums, 2026-10-20)
+
+`WardogsS2.preset` — name `**HELO DEFAULT** WARDOGS Integrated`, AB9, format
+1.0.4, again bound to `dcs_world` / `OH-6A` (telemetry block inert in
+Wardogs). The author's note: looser than the Season 1 presets, Lakota and
+Littlebird consolidated into one profile "since the helicopters are more
+stable" in Season 2, Cockpit telemetry mode set to Integrated. Base forces:
+
+| Field | S2 value |
+|---|---|
+| `bacic_spring` | **90** |
+| `bacic_damper` | 35 |
+| `bacic_inertia` | 35 |
+| `bacic_friction` | 35 |
+| `bacic_overall_strength` | 95 |
+| `bacic_gameForceFeedback` | 95 |
+| `bacic_start_force_enble` | 0 |
+| `hardware_balancing_enable` | 0 |
+| `bacic_force_model` | 2 |
+
+So the four community Wardogs presets now span spring 30–90, damper 30–55,
+friction 10–77, inertia 10–35. The S2 one is the stiffest and the only one
+with a named author; it is the natural "division of labour A" companion
+(set `bacic_spring` 0 when Flight Eng owns the spring).
+
 ## MOZA SDK 1.0.0.6 (owner-supplied archive, 2026-10-23) — the optional native backend
 
 Package: `MOZA_SDK_1.0.0.6_en.zip` (Windows x64/x86, debug/release; `MOZA_SDK.dll`
@@ -266,3 +291,23 @@ path is vendor-neutral. The one thing it uniquely offers is bypassing
 DirectInput's restart-on-run quirk and Cockpit's own effect mixing; worth a
 `MozaSdkBackend` behind the existing `ForceBackend` protocol if the SDL
 conformance check disappoints on hardware.
+
+### MOZA SDK & Developer Support forum (read 2026-10-23)
+
+https://support.mozaracing.com/en/support/discussions/forums/70000317671 — 22
+topics; nothing yet on the `MainCtrl_Ffb*` commands, units or helicopters.
+Three threads matter for an optional native backend:
+
+- **Licensing** (topic 70000509648, answered by Gudsen Support): "Our SDK does
+  not currently require a license file and is provided to developers free of
+  charge." Redistribution, EULA and attribution are not addressed. Rule for
+  this MIT project: never vendor `MOZA_SDK.dll`; a `MozaSdkBackend` loads it
+  by explicit path from the user's own MOZA installation.
+- **DLL name clash** (topic 70000509658, unanswered): the Racing SDK and the
+  Flight SDK both ship a `MOZA_SDK.dll` with different exports; starting the
+  Racing SDK launches Pit House, after which the Flight SDK stops seeing the
+  AB9. Load by full path and never rely on the search order.
+- **AB9 + MSFS 2024 SimConnect overhead** (topic 70000509626): MOZA Cockpit
+  running added ~7 ms to the sim's main thread; MOZA is investigating. Not
+  Wardogs-relevant, but a reminder that Cockpit itself costs CPU while Flight
+  Eng runs beside it.
