@@ -219,3 +219,50 @@ Lateral / longitudinal feel springs; magnetic-brake force trim (release →
 stick free, re-engage → new centre); steady high-frequency buzz that changes
 with rotor speed and airframe stress; SAS corrections isolated from the
 stick. This is the feel model the spec adopts (tap-to-lock variant).
+
+## MOZA SDK 1.0.0.6 (owner-supplied archive, 2026-10-23) — the optional native backend
+
+Package: `MOZA_SDK_1.0.0.6_en.zip` (Windows x64/x86, debug/release; `MOZA_SDK.dll`
++ `MOZA_SDK.lib`, C header `moza/moza.h`, C++ wrapper, `ApiDebugTool.exe`).
+Read only; nothing from it is vendored. It requires MOZA **DeviceService
+1.1.0.0+** (installed by MOZA Cockpit) to be running — the SDK talks to the
+service, not to USB directly (`MOZA_ERR_SERVICE_NOT_FOUND` otherwise).
+
+What it offers the AB9 (`MOZA_DC_AS` / `MOZA_DT_AS_FLIGHTBASE`): a force
+model that mirrors DirectInput PID almost one-to-one, sent as commands by
+name or id through a plain **C ABI** (so a pure-`ctypes` Python backend is
+feasible, no compiler):
+
+| Command | id | Request fields |
+|---|---:|---|
+| `MainCtrl_FfbNewEffect` | 603 | `type` (1 Constant, 2 Ramp, 3 Square, 4 Sine, 5 Triangle, 6/7 Sawtooth, 8 Spring, 9 Damper, 10 Inertia, 11 Friction), `index` 1–80 |
+| `MainCtrl_FfbConstant` | 604 | `effectBlockIndex, magnitude int16, duration ms uint16, enableAxis {X, Y, DirectionEnable}, directionX, directionY` (angle × 100) |
+| `MainCtrl_FfbPeriodic` | 606 | `index, magnitude, offset, phase, period uint32, duration, enableAxis, directionX/Y` |
+| `MainCtrl_FfbCondition` | 607 | `index, parameterBlockOffset, centerPointOffset int16, positive/negativeCoefficient int16, positive/negativeSaturation uint16, deadBand uint16, duration, enableAxis, directionX/Y` |
+| `MainCtrl_FfbEnvelope` | 608 | `index, attackLevel, fadeLevel, attackTim, fadeTime` |
+| `MainCtrl_FfbEffectOperation` | 609 | `index, operation` (0 Stop, 1 Start, 2 Free) |
+| `MainCtrl_FfbControl` | 610 | 0 stop calc, 1 start calc, 2 reset+free all, 3 stop all |
+
+Parameter `Main_CtrlFfbEnable` (312) — if 0 the app must stop real-time
+updates. Recommended sequence: `FfbControl(2)`, `FfbControl(1)`, register
+effects (sync, check the returned index), update periodically, `FfbControl(3)`
+on exit. The C surface is small: `Moza_Initialize/Shutdown`,
+`Moza_DeviceGetList/Open/Close`, `Moza_DeviceCommandGetInfoByName`,
+`Moza_DeviceCommandSend[Sync]` with a `MOZA_VALUE` list in the documented
+field order, `Moza_DeviceHidGetInputState` for axes/buttons, and an event
+callback for connect/disconnect.
+
+Mapping to Flight Eng's `Command`s is direct: `SpringCommand` → 607 Spring
+(`centerPointOffset`, coefficients, `deadBand`); `SineCommand` → 606 Sine;
+`PulseCommand` → 604 Constant with `duration`; `TransientCommand` → 606 +
+608 envelope (`fadeTime`). The per-tick finite-length refresh and the 4-slot
+pool carry over unchanged (80 effect blocks available). Units/ranges of
+`magnitude` and the condition fields are not stated in the guide — read them
+from `ApiDebugTool.exe` on the real base before building the backend.
+
+Why it stays optional (spec non-goal for v1): it binds to MOZA's service
+and ABI (1.0.0.6 already broke source/ABI compatibility once), while the SDL
+path is vendor-neutral. The one thing it uniquely offers is bypassing
+DirectInput's restart-on-run quirk and Cockpit's own effect mixing; worth a
+`MozaSdkBackend` behind the existing `ForceBackend` protocol if the SDL
+conformance check disappoints on hardware.
