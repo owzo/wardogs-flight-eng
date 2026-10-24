@@ -54,13 +54,21 @@ class FakeSdl:
     SDL_HAPTIC_CONSTANT = 1 << 0
     SDL_HAPTIC_SINE = 1 << 1
     SDL_HAPTIC_SPRING = 1 << 7
+    SDL_HAPTIC_DAMPER = 1 << 8
+    SDL_HAPTIC_INERTIA = 1 << 9
+    SDL_HAPTIC_FRICTION = 1 << 10
     SDL_HAPTIC_CARTESIAN = 1
     SDL_IGNORE = 0
 
     def __init__(self, *joysticks: FakeJoystick, supported: int | None = None) -> None:
         self.joysticks = list(joysticks)
         self.supported = (
-            self.SDL_HAPTIC_CONSTANT | self.SDL_HAPTIC_SINE | self.SDL_HAPTIC_SPRING
+            self.SDL_HAPTIC_CONSTANT
+            | self.SDL_HAPTIC_SINE
+            | self.SDL_HAPTIC_SPRING
+            | self.SDL_HAPTIC_DAMPER
+            | self.SDL_HAPTIC_INERTIA
+            | self.SDL_HAPTIC_FRICTION
             if supported is None
             else supported
         )

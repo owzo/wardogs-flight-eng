@@ -26,12 +26,12 @@ from wardogs_flight_eng.outputs.sdl_channel import (
     HapticFailure,
     attempt,
 )
+from wardogs_flight_eng.outputs.sdl_conditions import spring_effect
 from wardogs_flight_eng.outputs.sdl_effects import (
     milliseconds,
     period_ms,
     pulse_effect,
     sine_effect,
-    spring_effect,
     transient_effect,
 )
 from wardogs_flight_eng.outputs.sdl_persistent import PersistentEffects, SineClock

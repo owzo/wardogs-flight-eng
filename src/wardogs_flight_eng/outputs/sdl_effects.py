@@ -4,9 +4,10 @@ Normalised values scale to SDL's 16-bit range (x 32767, non-finite -> 0);
 lengths and periods are milliseconds (periods and fades capped at SDL's
 Uint16 65535), phase is hundredths of a degree. Commands arrive in frame
 space; a ``HapticAxisMap`` places each on its device haptic axis and flips
-the signed values (spring centre, pulse level) for an inverted binding. A
-spring's other-axis coefficients are 0; periodic and constant effects point
-along their haptic axis in Cartesian coordinates.
+the signed values (spring centre, pulse level) for an inverted binding.
+Periodic and constant effects point along their haptic axis in Cartesian
+coordinates; the condition effects (spring, friction, damper, inertia) are
+built in ``sdl_conditions`` from ``on_axis`` and ``direction``.
 """
 
 import math
@@ -15,11 +16,9 @@ from dataclasses import replace
 from wardogs_flight_eng.engine.commands import (
     Axis,
     PulseCommand,
-    SpringCommand,
     TransientCommand,
 )
 from wardogs_flight_eng.inputs.sdl_api import (
-    HapticCondition,
     HapticConstant,
     HapticDirection,
     HapticEffect,
@@ -30,7 +29,6 @@ from wardogs_flight_eng.inputs.sdl_api import (
 from wardogs_flight_eng.outputs.haptic_axes import HapticAxis, HapticAxisMap
 
 FULL_SCALE = 32767
-SATURATION_MAX = 0xFFFF
 PHASE_TURN = 36000
 UINT16_MAX = 0xFFFF
 _ZERO: Triple = (0, 0, 0)
@@ -64,33 +62,16 @@ def advance_phase(phase: int, elapsed_s: float, period: int) -> int:
     return round(phase + PHASE_TURN * elapsed_s * 1000 / period) % PHASE_TURN
 
 
-def _on_axis(axis: HapticAxis, value: int) -> Triple:
+def on_axis(axis: HapticAxis, value: int) -> Triple:
+    """``value`` on ``axis``'s haptic index, 0 on the other two."""
     values = [0, 0, 0]
     values[axis.haptic_index] = value
     return (values[0], values[1], values[2])
 
 
-def _direction(api: SdlApi, axis: HapticAxis) -> HapticDirection:
-    return HapticDirection(api.SDL_HAPTIC_CARTESIAN, _on_axis(axis, 1))
-
-
-def spring_effect(
-    api: SdlApi, axes: HapticAxisMap, command: SpringCommand, length_ms: int
-) -> HapticEffect:
-    """Single-axis centring spring about ``command.center`` (frame space)."""
-    axis = axes[command.axis]
-    coefficient = _on_axis(axis, scale(command.coefficient))
-    condition = HapticCondition(
-        direction=_direction(api, axis),
-        length=length_ms,
-        right_sat=_on_axis(axis, SATURATION_MAX),
-        left_sat=_on_axis(axis, SATURATION_MAX),
-        right_coeff=coefficient,
-        left_coeff=coefficient,
-        deadband=_on_axis(axis, scale(max(0.0, command.deadband))),
-        center=_on_axis(axis, scale(command.center * axis.sign)),
-    )
-    return HapticEffect(api.SDL_HAPTIC_SPRING, condition=condition)
+def direction(api: SdlApi, axis: HapticAxis) -> HapticDirection:
+    """Cartesian unit direction along ``axis``."""
+    return HapticDirection(api.SDL_HAPTIC_CARTESIAN, on_axis(axis, 1))
 
 
 def sine_effect(
@@ -106,7 +87,7 @@ def sine_effect(
 ) -> HapticEffect:
     """Unsigned sine along ``axis``; ``fade_length`` fades it out at the end."""
     periodic = HapticPeriodic(
-        direction=_direction(api, axes[axis]),
+        direction=direction(api, axes[axis]),
         length=length_ms,
         period=period,
         magnitude=scale(magnitude),
@@ -123,7 +104,7 @@ def pulse_effect(
     """Constant push; the sign of ``level`` is the device-space direction."""
     axis = axes[command.axis]
     constant = HapticConstant(
-        direction=_direction(api, axis),
+        direction=direction(api, axis),
         length=milliseconds(command.duration_s),
         level=scale(command.magnitude * axis.sign),
     )

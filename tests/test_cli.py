@@ -93,6 +93,19 @@ def test_check_device_exit_code_reflects_report() -> None:
     assert "constant" in failing.output and "no" in failing.output
 
 
+def test_check_device_reports_conditions_and_warns_when_only_they_are_missing() -> None:
+    legacy = FakeSdl(
+        stick(),
+        supported=FakeSdl.SDL_HAPTIC_CONSTANT
+        | FakeSdl.SDL_HAPTIC_SINE
+        | FakeSdl.SDL_HAPTIC_SPRING,
+    )
+    result = invoke(["check-device"], api=legacy)
+    assert result.code == 0 and "WARN" in result.output and "friction" in result.output
+    full = invoke(["check-device"], api=FakeSdl(stick()))
+    assert full.code == 0 and "PASS" in full.output and "inertia" in full.output
+
+
 def test_check_device_without_a_force_feedback_device_exits_2() -> None:
     assert invoke(["check-device"], api=FakeSdl(pedals())).code == 2
     unknown = invoke(["check-device", "--guid", "ffff"], api=FakeSdl(stick()))

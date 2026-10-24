@@ -51,6 +51,9 @@ def default_api() -> SdlApi:
 def _member(sdl: Any, effect_type: int) -> str:
     members = {
         sdl.SDL_HAPTIC_SPRING: "condition",
+        sdl.SDL_HAPTIC_DAMPER: "condition",
+        sdl.SDL_HAPTIC_INERTIA: "condition",
+        sdl.SDL_HAPTIC_FRICTION: "condition",
         sdl.SDL_HAPTIC_SINE: "periodic",
         sdl.SDL_HAPTIC_CONSTANT: "constant",
     }
@@ -99,6 +102,9 @@ class RealSdl:
         self.SDL_HAPTIC_CONSTANT: int = sdl.SDL_HAPTIC_CONSTANT
         self.SDL_HAPTIC_SINE: int = sdl.SDL_HAPTIC_SINE
         self.SDL_HAPTIC_SPRING: int = sdl.SDL_HAPTIC_SPRING
+        self.SDL_HAPTIC_DAMPER: int = sdl.SDL_HAPTIC_DAMPER
+        self.SDL_HAPTIC_INERTIA: int = sdl.SDL_HAPTIC_INERTIA
+        self.SDL_HAPTIC_FRICTION: int = sdl.SDL_HAPTIC_FRICTION
         self.SDL_HAPTIC_CARTESIAN: int = sdl.SDL_HAPTIC_CARTESIAN
         self.SDL_IGNORE: int = sdl.SDL_IGNORE
 

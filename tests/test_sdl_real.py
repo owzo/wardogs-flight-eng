@@ -12,18 +12,20 @@ from types import ModuleType
 import pytest
 from sdl_haptic_support import STANDARD_AXES
 
-from wardogs_flight_eng.engine.commands import Axis, PulseCommand, SpringCommand
+from wardogs_flight_eng.engine.commands import (
+    Axis,
+    FrictionCommand,
+    PulseCommand,
+    SpringCommand,
+)
 from wardogs_flight_eng.inputs.sdl_api import (
     HapticCondition,
     HapticConstant,
     HapticPeriodic,
 )
 from wardogs_flight_eng.inputs.sdl_real import RealSdl, to_sdl_effect
-from wardogs_flight_eng.outputs.sdl_effects import (
-    pulse_effect,
-    sine_effect,
-    spring_effect,
-)
+from wardogs_flight_eng.outputs.sdl_conditions import condition_effect, spring_effect
+from wardogs_flight_eng.outputs.sdl_effects import pulse_effect, sine_effect
 
 
 @pytest.fixture(scope="module")
@@ -62,6 +64,15 @@ def test_spring_converts_to_condition_struct(sdl2: ModuleType) -> None:
     assert out.condition.length == 1000
     assert out.condition.direction.type == sdl2.SDL_HAPTIC_CARTESIAN
     assert list(out.condition.direction.dir) == [0, 1, 0]
+
+
+def test_friction_converts_to_condition_struct(sdl2: ModuleType) -> None:
+    api = RealSdl(sdl2)
+    mirror = condition_effect(api, STANDARD_AXES, FrictionCommand(Axis.ROLL, 0.1), 1000)
+    out = to_sdl_effect(sdl2, mirror)
+    assert out.type == out.condition.type == sdl2.SDL_HAPTIC_FRICTION
+    assert list(out.condition.right_coeff) == [3277, 0, 0]
+    assert list(out.condition.left_sat) == [0xFFFF, 0, 0]
 
 
 def test_sine_and_constant_convert(sdl2: ModuleType) -> None:

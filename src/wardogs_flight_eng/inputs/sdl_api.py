@@ -91,6 +91,9 @@ class SdlApi(Protocol):
     SDL_HAPTIC_CONSTANT: int
     SDL_HAPTIC_SINE: int
     SDL_HAPTIC_SPRING: int
+    SDL_HAPTIC_DAMPER: int
+    SDL_HAPTIC_INERTIA: int
+    SDL_HAPTIC_FRICTION: int
     SDL_HAPTIC_CARTESIAN: int
     SDL_IGNORE: int
 

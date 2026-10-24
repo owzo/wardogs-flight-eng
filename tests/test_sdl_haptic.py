@@ -3,6 +3,7 @@
 import pytest
 from sdl_haptic_support import (
     PITCH_ONLY,
+    STANDARD_AXES,
     effect_calls,
     last_effect,
     open_backend,
@@ -12,12 +13,17 @@ from sdl_support import FakeSdl, stick
 
 from wardogs_flight_eng.engine.commands import (
     Axis,
+    ConditionCommand,
+    DamperCommand,
+    FrictionCommand,
+    InertiaCommand,
     PulseCommand,
     SineCommand,
     SpringCommand,
     TransientCommand,
 )
 from wardogs_flight_eng.outputs.protocol import ForceBackend
+from wardogs_flight_eng.outputs.sdl_conditions import condition_effect
 
 
 def test_refresh_every_tick_updates_in_place_and_reruns_every_tick() -> None:
@@ -41,6 +47,26 @@ def test_spring_condition_acts_on_its_axis_only() -> None:
     assert spring.deadband == (0, 655, 0)
     assert spring.right_sat == spring.left_sat == (0, 0xFFFF, 0)
     assert spring.direction.dir == PITCH_ONLY
+
+
+@pytest.mark.parametrize(
+    ("command", "kind", "coeff"),
+    [
+        (FrictionCommand(Axis.PITCH, 0.1), "SDL_HAPTIC_FRICTION", 3277),
+        (DamperCommand(Axis.ROLL, 0.25), "SDL_HAPTIC_DAMPER", 8192),
+        (InertiaCommand(Axis.PITCH, 0.08), "SDL_HAPTIC_INERTIA", 2621),
+    ],
+)
+def test_condition_effect_shape(
+    command: ConditionCommand, kind: str, coeff: int
+) -> None:
+    fake = FakeSdl(stick())
+    effect = condition_effect(fake, STANDARD_AXES, command, 1000)
+    assert effect.type == getattr(fake, kind)
+    on = (0, coeff, 0) if command.axis is Axis.PITCH else (coeff, 0, 0)
+    assert effect.condition.right_coeff == effect.condition.left_coeff == on
+    assert effect.condition.center == effect.condition.deadband == (0, 0, 0)
+    assert effect.condition.length == 1000
 
 
 def test_sine_period_from_frequency() -> None:

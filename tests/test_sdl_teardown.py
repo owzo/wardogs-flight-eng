@@ -85,8 +85,9 @@ def test_close_releases_device_even_when_all_off_fails() -> None:
 
 def test_probe_reports_supported_primitives() -> None:
     fake = FakeSdl(stick())
-    assert probe_primitives(GUID_STICK, fake) == PrimitiveReport(True, True, True, True)
+    assert probe_primitives(GUID_STICK, fake) == PrimitiveReport(*[True] * 7)
     created = sorted(i for i, _ in effect_calls(fake, "SDL_HapticNewEffect"))
+    assert len(created) == 6
     assert destroyed_ids(fake) == created
     assert fake.count("SDL_HapticClose") == 1
     assert fake.count("SDL_HapticRunEffect") == 0
@@ -98,4 +99,4 @@ def test_probe_reports_missing_primitives() -> None:
     fake = FakeSdl(stick(), supported=FakeSdl.SDL_HAPTIC_SPRING)
     fake.fail.add("SDL_HapticUpdateEffect")
     report = probe_primitives(GUID_STICK, fake)
-    assert report == PrimitiveReport(True, False, False, False)
+    assert report == PrimitiveReport(True, *[False] * 6)

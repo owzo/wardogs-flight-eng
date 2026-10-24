@@ -28,6 +28,11 @@ from wardogs_flight_eng.outputs.sdl_probe import probe_primitives
 log = logging.getLogger(__name__)
 
 LIVE_PERIOD_S = 0.1
+CONDITION_PRIMITIVES = frozenset({"friction", "damper", "inertia"})
+CONDITION_WARNING = (
+    "unboosted profiles cannot run without friction; "
+    "force_trim profiles run without the missing conditions"
+)
 
 
 def _open_one(name: str, ref: DeviceRef, api: SdlApi | None) -> SdlDevice:
@@ -137,7 +142,12 @@ def _probe_target(infos: list[DeviceInfo], guid: str | None) -> DeviceInfo:
 
 
 def check_device_command(args: argparse.Namespace, ctx: CliContext) -> int:
-    """Probe the four primitives; exit 0 only if every one was accepted."""
+    """Probe every primitive; exit 1 if a required one was refused.
+
+    Required: spring, spring_center_moves, sine, constant. Friction, damper and
+    inertia are optional: missing ones print a WARN and still exit 0, since
+    force-trim profiles run without them.
+    """
     target = _probe_target(enumerate_devices(ctx.api), args.guid)
     report = probe_primitives(target.guid, ctx.api)
     results = [(f.name, bool(getattr(report, f.name))) for f in fields(report)]
@@ -145,9 +155,15 @@ def check_device_command(args: argparse.Namespace, ctx: CliContext) -> int:
     ctx.console.table(
         ("primitive", "accepted"), ((n, "yes" if ok else "no") for n, ok in results)
     )
-    if all(ok for _, ok in results):
-        ctx.console.line("PASS: every force primitive was accepted")
+    missing = [name for name, ok in results if not ok]
+    required = [name for name in missing if name not in CONDITION_PRIMITIVES]
+    if required:
+        ctx.console.line(f"FAIL: not accepted: {', '.join(missing)}")
+        return EXIT_CONFIG
+    if missing:
+        ctx.console.line(
+            f"WARN: not accepted: {', '.join(missing)} ({CONDITION_WARNING})"
+        )
         return EXIT_OK
-    missing = ", ".join(name for name, ok in results if not ok)
-    ctx.console.line(f"FAIL: not accepted: {missing}")
-    return EXIT_CONFIG
+    ctx.console.line("PASS: every force primitive was accepted")
+    return EXIT_OK
