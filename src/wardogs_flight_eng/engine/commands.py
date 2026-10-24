@@ -55,8 +55,41 @@ class TransientCommand:
 
 
 @dataclass(frozen=True, slots=True)
+class FrictionCommand:
+    """Single-axis friction condition: constant drag, ``coefficient`` 0..1."""
+
+    axis: Axis
+    coefficient: float
+
+
+@dataclass(frozen=True, slots=True)
+class DamperCommand:
+    """Single-axis damper condition: drag against velocity, ``coefficient`` 0..1."""
+
+    axis: Axis
+    coefficient: float
+
+
+@dataclass(frozen=True, slots=True)
+class InertiaCommand:
+    """Single-axis inertia condition: resists acceleration, ``coefficient`` 0..1."""
+
+    axis: Axis
+    coefficient: float
+
+
+@dataclass(frozen=True, slots=True)
 class AllOffCommand:
     """Stop every active effect."""
 
 
-Command = SpringCommand | SineCommand | PulseCommand | TransientCommand | AllOffCommand
+ConditionCommand = FrictionCommand | DamperCommand | InertiaCommand
+
+Command = (
+    SpringCommand
+    | SineCommand
+    | PulseCommand
+    | TransientCommand
+    | ConditionCommand
+    | AllOffCommand
+)

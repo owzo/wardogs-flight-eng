@@ -9,6 +9,9 @@ from wardogs_flight_eng.engine.commands import (
     AllOffCommand,
     Axis,
     Command,
+    DamperCommand,
+    FrictionCommand,
+    InertiaCommand,
     PulseCommand,
     SineCommand,
     SpringCommand,
@@ -140,6 +143,8 @@ class SdlHapticBackend:
                 pool.play(t, effect, command.duration_s)
             case TransientCommand():
                 self._transient(t, command)
+            case FrictionCommand() | DamperCommand() | InertiaCommand():
+                log.debug("condition %s not yet played", command)
             case _:
                 assert_never(command)
 

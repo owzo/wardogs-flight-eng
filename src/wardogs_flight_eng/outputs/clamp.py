@@ -14,6 +14,10 @@ from wardogs_flight_eng.engine.commands import (
     AllOffCommand,
     Axis,
     Command,
+    ConditionCommand,
+    DamperCommand,
+    FrictionCommand,
+    InertiaCommand,
     PulseCommand,
     SineCommand,
     SpringCommand,
@@ -28,7 +32,7 @@ class ClampedBackend:
     """Wraps a backend and caps every command's strength at ``ceiling``.
 
     ``ceiling`` is the normalised fraction (0, 1] of the base's peak torque
-    the user allows. Spring coefficients and sine/transient magnitudes are
+    the user allows. Spring and condition coefficients and sine/transient magnitudes are
     held to ``[0, ceiling]``; pulse magnitudes to ``[-ceiling, ceiling]`` so
     the push direction survives. A non-finite value (NaN or +/-inf) fails
     closed: it is replaced by 0.0, never passed through and never raised.
@@ -68,6 +72,15 @@ class ClampedBackend:
                 if self._unchanged(command, value, limited):
                     return command
                 return replace(command, magnitude=limited)
+            case (
+                FrictionCommand(coefficient=value)
+                | DamperCommand(coefficient=value)
+                | InertiaCommand(coefficient=value)
+            ):
+                limited = self._limit(value, 0.0)
+                if self._unchanged(command, value, limited):
+                    return command
+                return replace(command, coefficient=limited)
             case PulseCommand(magnitude=value):
                 limited = self._limit(value, -self._ceiling)
                 if self._unchanged(command, value, limited):
@@ -83,7 +96,11 @@ class ClampedBackend:
 
     def _unchanged(
         self,
-        command: SpringCommand | SineCommand | PulseCommand | TransientCommand,
+        command: SpringCommand
+        | SineCommand
+        | PulseCommand
+        | TransientCommand
+        | ConditionCommand,
         value: float,
         limited: float,
     ) -> bool:

@@ -16,6 +16,9 @@ from typing import Any
 from wardogs_flight_eng.engine.commands import (
     AllOffCommand,
     Command,
+    DamperCommand,
+    FrictionCommand,
+    InertiaCommand,
     PulseCommand,
     SineCommand,
     SpringCommand,
@@ -29,6 +32,9 @@ _KINDS: dict[type, str] = {
     SineCommand: "sine",
     PulseCommand: "pulse",
     TransientCommand: "transient",
+    FrictionCommand: "friction",
+    DamperCommand: "damper",
+    InertiaCommand: "inertia",
     AllOffCommand: "all_off",
 }
 

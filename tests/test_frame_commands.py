@@ -3,6 +3,9 @@ import pytest
 from wardogs_flight_eng.engine.commands import (
     AllOffCommand,
     Axis,
+    DamperCommand,
+    FrictionCommand,
+    InertiaCommand,
     PulseCommand,
     SineCommand,
     SpringCommand,
@@ -44,6 +47,13 @@ def test_frame_accepts_range_boundaries_and_is_hashable() -> None:
 def test_commands_are_hashable_value_objects() -> None:
     a = SpringCommand(Axis.PITCH, 0.0, 0.5, 0.02)
     assert a == SpringCommand(Axis.PITCH, 0.0, 0.5, 0.02) and hash(a)
+
+
+def test_condition_commands_are_hashable_value_objects() -> None:
+    a = FrictionCommand(Axis.PITCH, 0.1)
+    assert a == FrictionCommand(Axis.PITCH, 0.1)
+    assert hash(a) == hash(FrictionCommand(Axis.PITCH, 0.1))
+    assert len({DamperCommand(Axis.ROLL, 0.2), InertiaCommand(Axis.ROLL, 0.05)}) == 2
 
 
 def test_all_command_types_hash_and_all_off_values_are_equal() -> None:
