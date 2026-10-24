@@ -59,7 +59,7 @@ def test_second_ctrl_c_during_teardown_is_ignored(
         result = invoke(_run(_profile(tmp_path, "bird")), api=fake)
     assert result.code == 0 and "stopped: stop after" in result.output
     assert "already stopping" in caplog.text
-    assert fake.count("SDL_HapticClose") == 1 and joysticks_released(fake)
+    assert fake.count("SDL_HapticClose") == 2 and joysticks_released(fake)
 
 
 def test_interrupt_in_teardown_all_off_still_releases(tmp_path: Path) -> None:
@@ -67,7 +67,7 @@ def test_interrupt_in_teardown_all_off_still_releases(tmp_path: Path) -> None:
     result = invoke(_run(_profile(tmp_path, "bird")), api=fake)
     assert result.code == 0
     assert "interrupted" in result.output and "base released" in result.output
-    assert fake.count("SDL_HapticClose") == 1 and joysticks_released(fake)
+    assert fake.count("SDL_HapticClose") == 2 and joysticks_released(fake)
 
 
 def test_unconfirmed_release_is_never_claimed(tmp_path: Path) -> None:
@@ -75,7 +75,7 @@ def test_unconfirmed_release_is_never_claimed(tmp_path: Path) -> None:
     result = invoke(_run(_profile(tmp_path, "bird")), api=fake)
     assert result.code == 2
     assert "released" not in result.output and "power-cycle" in result.output
-    assert fake.count("SDL_HapticClose") == 0 and joysticks_released(fake)
+    assert fake.count("SDL_HapticClose") == 1 and joysticks_released(fake)
 
 
 def test_a_ctrl_c_after_the_grace_deadline_interrupts() -> None:

@@ -23,7 +23,12 @@ from wardogs_flight_eng.cli_console import (
 from wardogs_flight_eng.cli_devices import close_devices, open_devices
 from wardogs_flight_eng.cli_interrupt import ReleaseWatch, ctrl_c_requests_stop
 from wardogs_flight_eng.cli_profiles import load_checked_profile
-from wardogs_flight_eng.cli_run_checks import haptic_axes, shared_map
+from wardogs_flight_eng.cli_run_checks import (
+    haptic_axes,
+    missing_conditions,
+    refuse_unboosted_without_friction,
+    shared_map,
+)
 from wardogs_flight_eng.constants.loader import load_constants
 from wardogs_flight_eng.engine.profile import Profile
 from wardogs_flight_eng.engine.synth import FlightEngine
@@ -155,6 +160,9 @@ def run_command(args: argparse.Namespace, ctx: CliContext) -> int:
                 f"device_map.axes.pitch/roll: device {base!r} "
                 f"({devices[base].name}) has no force feedback"
             )
+        refuse_unboosted_without_friction(
+            profiles, missing_conditions(devices[base]), devices[base].name
+        )
         source = CompositeInput(device_map, devices)
         names = ", ".join(profile.name for profile in profiles)
         ctx.console.line(f"running {names} at {args.rate:g} Hz; Ctrl+C to stop")

@@ -3,10 +3,13 @@
 from collections.abc import Sequence
 from pathlib import Path
 
-from wardogs_flight_eng.cli_console import CliError
+from wardogs_flight_eng.cli_console import EXIT_CONFIG, CliError
 from wardogs_flight_eng.engine.device_map import DeviceMap
 from wardogs_flight_eng.engine.profile import Profile
+from wardogs_flight_eng.inputs.sdl_device import SdlDevice
 from wardogs_flight_eng.outputs.haptic_axes import HapticAxisMap
+from wardogs_flight_eng.outputs.sdl_capabilities import ConditionSupport
+from wardogs_flight_eng.outputs.sdl_channel import HapticChannel
 
 
 def _first_difference(a: object, b: object, where: str) -> str | None:
@@ -64,3 +67,32 @@ def haptic_axes(device_map: DeviceMap) -> tuple[str, HapticAxisMap]:
         return pitch.device, HapticAxisMap.from_bindings(pitch=pitch, roll=roll)
     except ValueError as err:
         raise CliError(f"device_map.axes.pitch/roll: {err}") from err
+
+
+def missing_conditions(device: SdlDevice) -> frozenset[str]:
+    """The condition kinds the base's capability mask lacks.
+
+    The probe channel is closed before returning; the backend opens its own.
+    """
+    channel = HapticChannel(device.api, device.joystick)
+    try:
+        return ConditionSupport.from_channel(device.api, channel).missing
+    finally:
+        channel.close()
+
+
+def refuse_unboosted_without_friction(
+    profiles: Sequence[Profile], missing: frozenset[str], device_name: str
+) -> None:
+    """An unboosted profile needs friction to hold its trim clamp."""
+    if "friction" not in missing:
+        return
+    for profile in profiles:
+        if profile.feel.mode == "unboosted":
+            raise CliError(
+                f"profile {profile.name!r} uses feel.mode 'unboosted' but the "
+                f"base {device_name!r} reports no friction primitive, so the "
+                "trim clamp could not hold; set feel.mode to 'force_trim' in "
+                "that profile or use a base with friction",
+                EXIT_CONFIG,
+            )

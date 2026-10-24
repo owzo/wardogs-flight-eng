@@ -1,5 +1,6 @@
 """The ``run`` command against the fake SDL: wiring, exit codes and release."""
 
+import copy
 import json
 import signal
 from collections.abc import Callable, Iterator
@@ -8,6 +9,7 @@ from types import FrameType
 
 import pytest
 from cli_support import (
+    BOUND_MAP,
     TickingSdl,
     bound_document,
     detach_all,
@@ -19,6 +21,7 @@ from cli_support import (
 from sdl_support import GUID_STICK, FakeJoystick, FakeSdl, pedals, stick
 
 from wardogs_flight_eng import cli
+from wardogs_flight_eng.engine.profile import PROFILES_DIR
 
 
 @pytest.fixture(autouse=True)
@@ -42,9 +45,12 @@ def _run(profile: Path, *extra: str) -> list[str]:
 
 
 def _released(fake: FakeSdl) -> None:
-    """Haptic closed first, then both joysticks; nothing touched afterwards."""
+    """Haptic closed first, then both joysticks; nothing touched afterwards.
+
+    Two haptic closes: the capability probe's channel and the backend's.
+    """
     names = fake.names()
-    assert fake.count("SDL_HapticClose") == 1
+    assert fake.count("SDL_HapticClose") == 2
     assert joysticks_released(fake)
     assert names[-2:] == ["SDL_JoystickClose", "SDL_JoystickClose"]
     assert names.index("SDL_HapticClose") < len(names) - 2
@@ -82,11 +88,13 @@ def test_ctrl_c_stops_cleanly_and_tees_the_force_log(
 
 
 class CtrlCWhileOpeningHaptic(TickingSdl):
-    """Ctrl+C arrives just after the haptic opened, inside the backend build."""
+    """Ctrl+C arrives just after the backend's haptic opened (the second open;
+    the first is the capability probe, before the handler is installed)."""
 
     def SDL_HapticOpenFromJoystick(self, joystick: object) -> object | None:
         haptic = super().SDL_HapticOpenFromJoystick(joystick)
-        signal.raise_signal(signal.SIGINT)
+        if self.count("SDL_HapticOpenFromJoystick") == 2:
+            signal.raise_signal(signal.SIGINT)
         return haptic
 
 
@@ -216,3 +224,34 @@ def test_unwritable_log_exits_1_and_releases(profile: Path, tmp_path: Path) -> N
 def test_non_positive_rate_is_a_usage_error(profile: Path) -> None:
     result = invoke(["run", "--profile", str(profile), "--rate", "0"])
     assert result.code == 1 and "--rate" in result.output
+
+
+LEGACY = (
+    FakeSdl.SDL_HAPTIC_CONSTANT | FakeSdl.SDL_HAPTIC_SINE | FakeSdl.SDL_HAPTIC_SPRING
+)
+
+
+def bound_lakota(tmp_path: Path) -> Path:
+    doc = json.loads((PROFILES_DIR / "lakota.json").read_text(encoding="utf-8"))
+    doc["device_map"] = copy.deepcopy(BOUND_MAP)
+    return write_profile(tmp_path / "lakota.json", doc)
+
+
+def test_run_refuses_unboosted_profile_without_friction(profile: Path) -> None:
+    fake = TickingSdl(stick(), pedals(), after=200, then=detach_all, supported=LEGACY)
+    result = invoke(["run", "--profile", str(profile)], api=fake)
+    assert result.code == 1 and "unboosted" in result.output
+    assert "friction" in result.output
+    assert fake.count("SDL_HapticClose") >= 1 and joysticks_released(fake)
+
+
+def test_run_refuses_unboosted_profile_when_query_is_zero(profile: Path) -> None:
+    fake = TickingSdl(stick(), pedals(), after=200, then=detach_all)
+    fake.query_result = 0
+    assert invoke(["run", "--profile", str(profile)], api=fake).code == 1
+
+
+def test_run_allows_force_trim_profile_without_friction(tmp_path: Path) -> None:
+    fake = TickingSdl(stick(), pedals(), after=200, then=detach_all, supported=LEGACY)
+    result = invoke(["run", "--profile", str(bound_lakota(tmp_path))], api=fake)
+    assert "unboosted" not in result.output and result.code == 2
