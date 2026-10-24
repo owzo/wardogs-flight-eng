@@ -14,16 +14,21 @@
     }
   },
   "feel": {
+    "mode": "force_trim",
     "spring_coefficient": 0.6,
     "roll_scale": 0.5,
     "deadband": 0.02,
-    "trim_slew_s": 0.3
+    "trim_slew_s": 0.3,
+    "friction": 0.12,
+    "damper": 0.3,
+    "inertia": 0.1
   },
   "rotor": {
     "base_amplitude": 0.35,
     "deflection_factor": 0.5,
     "spool_up_s": 3.0,
-    "spool_down_rpm_per_s": null
+    "spool_down_rpm_per_s": null,
+    "airspeed_factor": 0.15
   },
   "recoil": {
     "amplitude": 0.0,
@@ -37,6 +42,11 @@
     "force_ceiling": 0.6,
     "watchdog_s": 0.25
   },
+  "estimator": {
+    "kind": "input",
+    "forward_threshold": 0.15,
+    "tau_s": 4.0
+  },
   "taste": [
     "spring_coefficient",
     "roll_scale",
@@ -49,6 +59,13 @@
     "rocket_kick",
     "shake_amplitude",
     "force_ceiling",
-    "watchdog_s"
+    "watchdog_s",
+    "mode",
+    "friction",
+    "damper",
+    "inertia",
+    "airspeed_factor",
+    "forward_threshold",
+    "tau_s"
   ]
 }

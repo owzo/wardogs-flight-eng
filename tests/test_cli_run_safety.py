@@ -95,6 +95,7 @@ def test_lowest_force_ceiling_of_all_profiles_clamps(tmp_path: Path) -> None:
     soft = bound_document()  # every gain within its own 0.3 ceiling
     soft["name"] = "second"
     soft["feel"]["spring_coefficient"] = soft["recoil"]["amplitude"] = 0.3
+    soft["feel"]["clamp_friction"] = 0.3
     soft["safety"]["force_ceiling"] = 0.3
     second = write_profile(tmp_path / "second.json", soft)
     log = tmp_path / "forces.jsonl"

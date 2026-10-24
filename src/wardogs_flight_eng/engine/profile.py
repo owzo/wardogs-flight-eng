@@ -3,12 +3,14 @@
 Profiles are hand-edited JSON. Every value here is owner taste (listed in
 ``taste``) or a pointer into the game constants (``airframe``,
 ``pilot_weapon``); game facts themselves live only in the constants file.
+The section models live in ``profile_sections`` and are re-exported here.
 """
 
+import json
 from pathlib import Path
-from typing import Annotated, Final
+from typing import Any, Final, Self
 
-from pydantic import Field, ValidationError
+from pydantic import ValidationError
 
 from wardogs_flight_eng.constants.model import GameConstants
 from wardogs_flight_eng.engine.device_map import (
@@ -20,6 +22,14 @@ from wardogs_flight_eng.engine.device_map import (
     DeviceRef,
     ProfileModel,
 )
+from wardogs_flight_eng.engine.profile_sections import (
+    Estimator,
+    Feel,
+    FeelMode,
+    Recoil,
+    Rotor,
+    Safety,
+)
 
 __all__ = [
     "PROFILES_DIR",
@@ -29,7 +39,9 @@ __all__ = [
     "Calibration",
     "DeviceMap",
     "DeviceRef",
+    "Estimator",
     "Feel",
+    "FeelMode",
     "Profile",
     "ProfileError",
     "Recoil",
@@ -41,47 +53,17 @@ __all__ = [
 PROFILES_DIR: Final[Path] = Path(__file__).resolve().parents[1] / "profiles"
 """Directory holding the shipped airframe profiles."""
 
-Unit = Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]
-SignedUnit = Annotated[float, Field(ge=-1, le=1, allow_inf_nan=False)]
-NonNegative = Annotated[float, Field(ge=0, allow_inf_nan=False)]
-Positive = Annotated[float, Field(gt=0, allow_inf_nan=False)]
+MIGRATION_HINT: Final[str] = (
+    "this profile predates 0.2.0: copy the shipped profile for its airframe "
+    "from the profiles directory, fill device_map and re-run calibrate"
+)
+"""Appended when a 0.2.0 field under ``feel``, ``rotor`` or ``estimator`` is missing."""
+
+_MIGRATED_SECTIONS: Final[frozenset[str]] = frozenset({"feel", "rotor", "estimator"})
 
 
 class ProfileError(ValueError):
     """A profile is unreadable, malformed, or names unknown game data."""
-
-
-class Feel(ProfileModel):
-    """Centring spring. The roll spring is ``spring_coefficient * roll_scale``."""
-
-    spring_coefficient: Unit
-    roll_scale: Unit = 0.5
-    deadband: Unit
-    trim_slew_s: NonNegative
-
-
-class Rotor(ProfileModel):
-    """Rotor buzz. ``None`` spool-down falls back to the airframe's constant."""
-
-    base_amplitude: Unit
-    deflection_factor: NonNegative
-    spool_up_s: NonNegative
-    spool_down_rpm_per_s: Positive | None
-
-
-class Recoil(ProfileModel):
-    """Recoil pulse gain, ``(roll, pitch)`` rocket kick and shake magnitude."""
-
-    amplitude: Unit
-    rocket_kick: tuple[SignedUnit, SignedUnit]
-    shake_amplitude: Unit
-
-
-class Safety(ProfileModel):
-    """Backend force ceiling and the engine's stalled-tick watchdog."""
-
-    force_ceiling: Annotated[float, Field(gt=0, le=1, allow_inf_nan=False)] = 0.6
-    watchdog_s: Positive = 0.25
 
 
 class Profile(ProfileModel):
@@ -96,7 +78,16 @@ class Profile(ProfileModel):
     rotor: Rotor
     recoil: Recoil
     safety: Safety
+    estimator: Estimator
     taste: list[str]
+
+    @classmethod
+    def from_document(cls, raw: dict[str, Any]) -> Self:
+        """Validate a parsed profile document; failures become ``ProfileError``."""
+        try:
+            return cls.model_validate(raw)
+        except ValidationError as err:
+            raise ProfileError(_describe(err)) from err
 
     def validate_against(self, constants: GameConstants) -> None:
         """Raise ``ProfileError`` unless the airframe and weapon are game keys
@@ -120,10 +111,15 @@ class Profile(ProfileModel):
         ceiling = self.safety.force_ceiling
         gains = {
             "feel.spring_coefficient": self.feel.spring_coefficient,
+            "feel.friction": self.feel.friction,
+            "feel.damper": self.feel.damper,
+            "feel.inertia": self.feel.inertia,
             "rotor.base_amplitude": self.rotor.base_amplitude,
             "recoil.amplitude": self.recoil.amplitude,
             "recoil.shake_amplitude": self.recoil.shake_amplitude,
         }
+        if self.feel.clamp_friction is not None:
+            gains["feel.clamp_friction"] = self.feel.clamp_friction
         for field, value in gains.items():
             if value > ceiling:
                 raise ProfileError(
@@ -133,11 +129,19 @@ class Profile(ProfileModel):
 
 
 def _describe(err: ValidationError) -> str:
-    """Every validation failure as ``dotted.field: reason``, first failure first."""
-    return "; ".join(
+    """Every validation failure as ``dotted.field: reason``, first failure first,
+    plus the migration hint when a 0.2.0 section field is missing."""
+    errors = err.errors()
+    described = "; ".join(
         f"{'.'.join(str(part) for part in e['loc']) or '<document>'}: {e['msg']}"
-        for e in err.errors()
+        for e in errors
     )
+    if any(
+        e["type"] == "missing" and e["loc"] and e["loc"][0] in _MIGRATED_SECTIONS
+        for e in errors
+    ):
+        return f"{described}; {MIGRATION_HINT}"
+    return described
 
 
 def load_profile(path: Path) -> Profile:
@@ -147,6 +151,10 @@ def load_profile(path: Path) -> Profile:
     except OSError as err:
         raise ProfileError(f"cannot read profile {path}: {err.strerror}") from err
     try:
-        return Profile.model_validate_json(text)
-    except ValidationError as err:
-        raise ProfileError(f"invalid profile {path}: {_describe(err)}") from err
+        raw = json.loads(text)
+    except json.JSONDecodeError as err:
+        raise ProfileError(f"invalid profile {path}: {err}") from err
+    try:
+        return Profile.from_document(raw)
+    except ProfileError as err:
+        raise ProfileError(f"invalid profile {path}: {err}") from err

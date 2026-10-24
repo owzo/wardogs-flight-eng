@@ -40,8 +40,8 @@ def test_idle_tick_emits_centered_springs_and_silent_buzz() -> None:
         s.center == 0 for s in springs
     )
     assert {s.axis: s.coefficient for s in springs} == {
-        Axis.PITCH: 0.35,
-        Axis.ROLL: pytest.approx(0.175),
+        Axis.PITCH: 0.12,
+        Axis.ROLL: pytest.approx(0.06),
     }  # roll_scale 0.5
     assert all(
         c.magnitude == 0 for c in cmds if isinstance(c, SineCommand)
