@@ -17,7 +17,10 @@ LB = load_profile(PROFILES_DIR / "littlebird-miniguns.json").feel  # unboosted
 LAK = load_profile(PROFILES_DIR / "lakota.json").feel  # force_trim
 
 
-def by_kind(cmds: list[Command], kind: type, axis: Axis) -> float:
+type Coefficiented = SpringCommand | FrictionCommand | DamperCommand | InertiaCommand
+
+
+def by_kind[C: Coefficiented](cmds: list[Command], kind: type[C], axis: Axis) -> float:
     (c,) = [c for c in cmds if isinstance(c, kind) and c.axis is axis]
     return c.coefficient
 
@@ -28,10 +31,9 @@ def test_force_trim_emits_constant_conditions_and_moves_the_anchor() -> None:
     f.step(1.0)
     cmds = f.conditions()
     springs = [c for c in cmds if isinstance(c, SpringCommand)]
-    assert [(s.axis, s.center, s.coefficient) for s in springs] == [
-        (Axis.PITCH, pytest.approx(0.4), 0.5),
-        (Axis.ROLL, pytest.approx(-0.2), 0.25),
-    ]
+    assert [s.axis for s in springs] == [Axis.PITCH, Axis.ROLL]
+    assert [s.center for s in springs] == pytest.approx([0.4, -0.2])
+    assert [s.coefficient for s in springs] == [0.5, 0.25]
     assert by_kind(cmds, FrictionCommand, Axis.PITCH) == 0.1
     assert by_kind(cmds, FrictionCommand, Axis.ROLL) == pytest.approx(0.05)
     assert (
