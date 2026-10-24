@@ -85,13 +85,12 @@ class _Tick:
         self._wait(t)
 
     def _cycle_profile(self) -> None:
-        """Zero forces and hand the ALL_OFF latch and button state to the next."""
+        """Zero forces and hand control to the next engine (``take_over``)."""
         self._backend.all_off()
         outgoing = self.engine
         self._index = (self._index + 1) % len(self._engines)
         incoming = self.engine
-        incoming.all_off = outgoing.all_off
-        incoming.prime_buttons(self._previous_held)
+        incoming.take_over(outgoing)
         log.info("profile switched to %s", incoming.profile.name)
 
     def _wait(self, t: float) -> None:

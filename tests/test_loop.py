@@ -20,7 +20,13 @@ from loop_support import (
 )
 
 from wardogs_flight_eng.constants.loader import load_constants
-from wardogs_flight_eng.engine.commands import AllOffCommand, Command, SineCommand
+from wardogs_flight_eng.engine.commands import (
+    AllOffCommand,
+    Command,
+    SineCommand,
+    SpringCommand,
+)
+from wardogs_flight_eng.engine.frame import Button, ControlFrame
 from wardogs_flight_eng.engine.profile import PROFILES_DIR, load_profile
 from wardogs_flight_eng.engine.synth import FlightEngine
 from wardogs_flight_eng.inputs.composite import CompositeInput
@@ -201,8 +207,30 @@ def test_profile_cycle_zeroes_forces_before_the_incoming_engine_applies(
     r = run([engine_lb, engine_lakota], source, backend, sleep=script, max_ticks=3)
     assert r.active_profile == "lakota"
     assert backend.events == ["apply", "all_off", "apply", "apply", "all_off", "close"]
-    fresh_lakota = make_engine("lakota").step(0.01, source.read())
-    assert _sine_hz(backend.applied[1]) == pytest.approx(_sine_hz(fresh_lakota))
+    # take_over carries the spool: one 0.01 s Littlebird tick of the 3 s spool-up,
+    # then one Lakota tick, at the Lakota's 250 rpm (the Littlebird's is 330.4).
+    lakota_hz = 2 * 0.01 / 3.0 * 250 / 60
+    assert _sine_hz(backend.applied[1]) == pytest.approx([lakota_hz] * 2)
+
+
+def test_profile_cycle_hands_over_through_take_over(
+    engine_lakota: FlightEngine,
+    source: CompositeInput,
+    backend: RecordingBackend,
+    devices: Devices,
+) -> None:
+    havoc = make_engine("havoc")
+    for e in (engine_lakota, havoc):  # both anchors locked at (0.5, 0.5)
+        e.step(0.01, ControlFrame(0.5, 0.5, 0, 0, frozenset({Button.TRIM_LOCK})))
+        for _ in range(50):
+            e.step(0.01, ControlFrame(0.5, 0.5, 0, 0, frozenset()))
+    cycle = {PROFILE_CYCLE_IDX}
+    script = ButtonScript(devices, [set(), cycle, {ALL_OFF_IDX}, cycle, set()])
+    r = run([engine_lakota, havoc], source, backend, sleep=script, max_ticks=5)
+    centers = [c.center for c in backend.applied[1] if isinstance(c, SpringCommand)]
+    assert centers == [0.0, 0.0]  # havoc's locked anchor was dropped
+    assert r.active_profile == "lakota" and engine_lakota.all_off is True
+    assert backend.applied[3:] == [[AllOffCommand()], [AllOffCommand()]]
 
 
 def _sine_hz(commands: list[Command]) -> list[float]:

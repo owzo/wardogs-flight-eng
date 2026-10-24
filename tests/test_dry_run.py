@@ -31,7 +31,12 @@ def test_dry_run_log_shows_trim_lock_and_fire(tmp_path: Path) -> None:
         for r in rows
         if r["kind"] == "spring" and r["axis"] == "pitch" and r["t"] > 5.5
     ]
-    assert springs_after_lock[0]["center"] == pytest.approx(0.3, abs=0.01)
+    # Unboosted Littlebird: the lock clamps the stick (spring faded out,
+    # friction at clamp_friction 0.5) instead of moving the spring centre.
+    lock = springs_after_lock[0]
+    assert (lock["center"], lock["coefficient"]) == (0.0, 0.0)
+    friction = [r for r in rows if r["kind"] == "friction" and r["t"] > 5.5]
+    assert friction[0]["coefficient"] == pytest.approx(0.5)
     pulses = [r for r in rows if r["kind"] == "pulse" and 7.3 < r["t"] < 9.0]
     # 25 rounds/s for ~1.7 s after the 0.25 s wind-up = 42 rounds, each a pitch
     # and a roll pulse: 84 pulses in all, 42 per axis.
