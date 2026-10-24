@@ -1,11 +1,12 @@
-"""Persistent haptic effects (springs, rotor sines): uploaded once, re-run rarely.
+"""Persistent effects (springs, conditions, rotor sines): uploaded once, re-run rarely.
 
 Every persistent effect has a finite length, so if the loop freezes the base
 lets the force time out instead of holding it; staying alive therefore needs
 a re-run before that length runs out. On Windows both
 ``SDL_HapticUpdateEffect`` and ``SDL_HapticRunEffect`` restart a playing
-effect, so updating and running all four persistent effects every tick
-restarts them at the loop rate (about 800 restarts a second at 200 Hz).
+effect, so updating and running every persistent effect every tick restarts
+it at the loop rate (about 800 restarts a second at 200 Hz for the two springs
+and two sines alone).
 
 ``PersistentEffects`` instead uploads an effect only when it differs from the
 held one (frozen-dataclass equality) and runs it only when it was just
@@ -18,10 +19,16 @@ update-and-run on every tick, so the two can be compared on hardware.
 from dataclasses import dataclass
 from functools import partial
 
-from wardogs_flight_eng.engine.commands import Axis
-from wardogs_flight_eng.inputs.sdl_api import HapticEffect
+from wardogs_flight_eng.engine.commands import Axis, SineCommand
+from wardogs_flight_eng.inputs.sdl_api import HapticEffect, SdlApi
+from wardogs_flight_eng.outputs.haptic_axes import HapticAxisMap
 from wardogs_flight_eng.outputs.sdl_channel import HapticChannel, HapticFailure, attempt
-from wardogs_flight_eng.outputs.sdl_effects import advance_phase, silenced
+from wardogs_flight_eng.outputs.sdl_effects import (
+    advance_phase,
+    period_ms,
+    silenced,
+    sine_effect,
+)
 
 IDLE_PERIOD_MS = 1000  # sine period until a positive frequency is commanded
 
@@ -57,7 +64,7 @@ class SineClock:
 
 
 class PersistentEffects:
-    """The held spring and sine effects of one haptic device, by kind and axis."""
+    """The held persistent effects of one haptic device, by kind and axis."""
 
     def __init__(
         self, channel: HapticChannel, length_s: float, *, refresh_every_tick: bool
@@ -105,3 +112,46 @@ class PersistentEffects:
             held.ran_at = None
             update = partial(self._channel.update, held.effect_id, held.effect)
             attempt(failures, update)
+
+
+class PersistentSines:
+    """Each axis's rotor sine, held in ``effects`` under ``("sine", axis)``."""
+
+    def __init__(
+        self,
+        api: SdlApi,
+        axes: HapticAxisMap,
+        effects: PersistentEffects,
+        length_ms: int,
+    ) -> None:
+        self._api = api
+        self._axes = axes
+        self._effects = effects
+        self._length_ms = length_ms
+        self._clocks: dict[Axis, SineClock] = {}
+
+    def play(self, t: float, command: SineCommand) -> None:
+        """The axis's sine; frequency 0 silences it and keeps the last period."""
+        axis, key = command.axis, ("sine", command.axis)
+        clock = self._clocks.setdefault(axis, SineClock())
+        period = period_ms(command.frequency_hz)
+        magnitude = command.magnitude if period is not None else 0.0
+        period = clock.period if period is None else period
+        steady = self._effect(axis, period, magnitude, clock.phase)
+        if not self._effects.due(t, key, steady):
+            return
+        phase = clock.restart(t, period)
+        self._effects.play(t, key, self._effect(axis, period, magnitude, phase))
+
+    def _effect(
+        self, axis: Axis, period: int, magnitude: float, phase: int
+    ) -> HapticEffect:
+        return sine_effect(
+            self._api,
+            self._axes,
+            axis,
+            period=period,
+            magnitude=magnitude,
+            length_ms=self._length_ms,
+            phase=phase,
+        )

@@ -76,6 +76,7 @@ class FakeSdl:
         self.effects: dict[int, HapticEffect] = {}
         self.fail: set[str] = set()
         self.init_result = 0
+        self.query_result: int | None = None  # SDL_HapticQuery's answer, if set
         self._next_id = 0
 
     def names(self) -> list[str]:
@@ -147,7 +148,7 @@ class FakeSdl:
         return FakeHaptic(found) if found.haptic else None
 
     def SDL_HapticQuery(self, haptic: object) -> int:
-        return self.supported
+        return self.supported if self.query_result is None else self.query_result
 
     def SDL_HapticNewEffect(self, haptic: object, effect: HapticEffect) -> int:
         if self._status("SDL_HapticNewEffect", haptic) < 0:

@@ -9,6 +9,7 @@ from wardogs_flight_eng.engine.commands import (
     AllOffCommand,
     Axis,
     Command,
+    ConditionCommand,
     DamperCommand,
     FrictionCommand,
     InertiaCommand,
@@ -17,24 +18,29 @@ from wardogs_flight_eng.engine.commands import (
     SpringCommand,
     TransientCommand,
 )
-from wardogs_flight_eng.inputs.sdl_api import HapticEffect
 from wardogs_flight_eng.inputs.sdl_device import SdlDevice
 from wardogs_flight_eng.outputs.haptic_axes import HapticAxisMap
+from wardogs_flight_eng.outputs.sdl_capabilities import (
+    ConditionSupport,
+    condition_kind,
+)
 from wardogs_flight_eng.outputs.sdl_channel import (
     EffectPool,
     HapticChannel,
     HapticFailure,
     attempt,
 )
-from wardogs_flight_eng.outputs.sdl_conditions import spring_effect
+from wardogs_flight_eng.outputs.sdl_conditions import condition_effect, spring_effect
 from wardogs_flight_eng.outputs.sdl_effects import (
     milliseconds,
     period_ms,
     pulse_effect,
-    sine_effect,
     transient_effect,
 )
-from wardogs_flight_eng.outputs.sdl_persistent import PersistentEffects, SineClock
+from wardogs_flight_eng.outputs.sdl_persistent import (
+    PersistentEffects,
+    PersistentSines,
+)
 from wardogs_flight_eng.outputs.sdl_probe import PrimitiveReport, probe_primitives
 
 __all__ = ["PrimitiveReport", "SdlHapticBackend", "probe_primitives"]
@@ -50,8 +56,9 @@ class SdlHapticBackend:
     required) undoes that: it picks each axis's haptic index and flips the
     spring centre and pulse level of an inverted axis.
 
-    Springs and sines are persistent: one effect per axis, created on first
-    use and never recreated. Their length is finite -- ``persistent_length_s``
+    Springs, sines and the friction, damper and inertia conditions are
+    persistent: one effect per kind and axis, created on first use and never
+    recreated. Their length is finite -- ``persistent_length_s``
     (the CLI passes 2 x the profile's watchdog, at least 1 s) -- so if the
     loop freezes the base lets the forces time out instead of holding them.
     By default (``refresh_every_tick=False``) an effect is updated only when
@@ -62,6 +69,9 @@ class SdlHapticBackend:
     every persistent effect every tick -- kept so a hardware pass can A/B the
     two. A restarted sine starts from the phase its waveform has reached, so
     it stays continuous in both modes (``sdl_persistent.SineClock``).
+
+    A condition kind the base does not report (``missing_conditions``; all
+    three when the query returns 0) is dropped after one WARNING.
 
     Pulses (constant) and transients (fading sine) play from a pool of four
     slots per axis and kind; slots are destroyed in ``close``. A detached
@@ -83,15 +93,23 @@ class SdlHapticBackend:
         self._api = device.api
         self._axes = axis_map
         self._channel = HapticChannel(device.api, device.joystick)
+        self._support = ConditionSupport.from_channel(device.api, self._channel)
         self._length_ms = milliseconds(persistent_length_s)
         self._persistent = PersistentEffects(
             self._channel,
             persistent_length_s,
             refresh_every_tick=refresh_every_tick,
         )
+        self._sines = PersistentSines(
+            device.api, axis_map, self._persistent, self._length_ms
+        )
         self._pools: dict[tuple[str, Axis], EffectPool] = {}
-        self._sines: dict[Axis, SineClock] = {}
         self._closed = False
+
+    @property
+    def missing_conditions(self) -> frozenset[str]:
+        """Condition kinds the base does not report; their commands are dropped."""
+        return self._support.missing
 
     def apply(self, t: float, commands: Sequence[Command]) -> None:
         if self._closed:
@@ -136,7 +154,7 @@ class SdlHapticBackend:
                 if self._persistent.due(t, ("spring", command.axis), effect):
                     self._persistent.play(t, ("spring", command.axis), effect)
             case SineCommand():
-                self._sine(t, command)
+                self._sines.play(t, command)
             case PulseCommand():
                 pool = self._pool("pulse", command.axis)
                 effect = pulse_effect(self._api, self._axes, command)
@@ -144,35 +162,18 @@ class SdlHapticBackend:
             case TransientCommand():
                 self._transient(t, command)
             case FrictionCommand() | DamperCommand() | InertiaCommand():
-                log.debug("condition %s not yet played", command)
+                self._condition(t, command)
             case _:
                 assert_never(command)
 
-    def _sine(self, t: float, command: SineCommand) -> None:
-        """The axis's sine; frequency 0 silences it and keeps the last period."""
-        axis, key = command.axis, ("sine", command.axis)
-        clock = self._sines.setdefault(axis, SineClock())
-        period = period_ms(command.frequency_hz)
-        magnitude = command.magnitude if period is not None else 0.0
-        period = clock.period if period is None else period
-        steady = self._sine_effect(axis, period, magnitude, clock.phase)
-        if not self._persistent.due(t, key, steady):
+    def _condition(self, t: float, command: ConditionCommand) -> None:
+        """Friction, damper or inertia, unless the base lacks that kind."""
+        if not self._support.allows(command):
             return
-        phase = clock.restart(t, period)
-        self._persistent.play(t, key, self._sine_effect(axis, period, magnitude, phase))
-
-    def _sine_effect(
-        self, axis: Axis, period: int, magnitude: float, phase: int
-    ) -> HapticEffect:
-        return sine_effect(
-            self._api,
-            self._axes,
-            axis,
-            period=period,
-            magnitude=magnitude,
-            length_ms=self._length_ms,
-            phase=phase,
-        )
+        effect = condition_effect(self._api, self._axes, command, self._length_ms)
+        key = (condition_kind(command), command.axis)
+        if self._persistent.due(t, key, effect):
+            self._persistent.play(t, key, effect)
 
     def _transient(self, t: float, command: TransientCommand) -> None:
         period = period_ms(command.frequency_hz)
