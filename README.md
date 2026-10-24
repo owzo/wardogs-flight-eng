@@ -48,7 +48,7 @@ Version 0.1.0 (v1).
 **Developers:** install [uv](https://docs.astral.sh/uv/), then
 
 ```
-git clone <this repository>
+git clone https://github.com/owzo/wardogs-flight-eng.git
 cd wardogs-flight-eng
 uv sync
 uv run wardogs-flight-eng --help
@@ -73,7 +73,7 @@ The shipped profiles are the four JSON files in
 `src/wardogs_flight_eng/profiles/` of the repository: copy the one you want out
 of there into a folder of your own and edit the copy. (The `.exe` carries them
 inside itself, where you cannot edit them.) If you only have the `.exe`,
-download the repository as a ZIP from its page and take the profiles from
+download the repository as a ZIP from https://github.com/owzo/wardogs-flight-eng and take the profiles from
 `src/wardogs_flight_eng/profiles/` and the scenario from `tests/scenarios/`.
 
 ## First run
