@@ -23,6 +23,7 @@ class RotorModel:
         spool_down_rpm_per_s: float,
         base_amplitude: float,
         deflection_factor: float,
+        airspeed_factor: float = 0.0,
     ) -> None:
         """Create a rotor that is running and at rest (0 RPM).
 
@@ -36,6 +37,7 @@ class RotorModel:
             ("spool_down_rpm_per_s", spool_down_rpm_per_s),
             ("base_amplitude", base_amplitude),
             ("deflection_factor", deflection_factor),
+            ("airspeed_factor", airspeed_factor),
         ):
             if value < 0:
                 raise ValueError(f"{name} must be >= 0, got {value}")
@@ -44,6 +46,7 @@ class RotorModel:
         self._spool_down_rpm_per_s = spool_down_rpm_per_s
         self._base_amplitude = base_amplitude
         self._deflection_factor = deflection_factor
+        self._airspeed_factor = airspeed_factor
         self.running = True
         self.rpm = 0.0
 
@@ -51,6 +54,19 @@ class RotorModel:
     def frequency_hz(self) -> float:
         """1/rev vibration frequency in Hz (``rpm / 60``)."""
         return self.rpm / _SECONDS_PER_MINUTE
+
+    @property
+    def spool_fraction(self) -> float:
+        """Current RPM as a fraction of operating RPM (``rpm / operating_rpm``)."""
+        return self.rpm / self._operating_rpm
+
+    def take_over(self, spool_fraction: float, running: bool) -> None:
+        """Adopt another rotor's spool state, scaled to this rotor's operating RPM.
+
+        ``spool_fraction`` is clamped to ``0..1`` first.
+        """
+        self.rpm = max(0.0, min(1.0, spool_fraction)) * self._operating_rpm
+        self.running = running
 
     def toggle(self) -> None:
         """Switch between running (spooling up) and stopped (spooling down)."""
@@ -64,18 +80,21 @@ class RotorModel:
         else:
             self.rpm = max(0.0, self.rpm - self._spool_down_rpm_per_s * dt)
 
-    def amplitude(self, collective: float, deflection: float) -> float:
+    def amplitude(
+        self, collective: float, deflection: float, airspeed: float = 0.0
+    ) -> float:
         """Buzz amplitude clamped to ``0..1``.
 
         ``collective`` is the normalised collective ``0..1`` and
         ``deflection`` the cyclic's distance from the trim centre ``0..1``.
+        ``airspeed`` is the normalised airspeed estimate ``0..1``.
         """
-        spool_fraction = self.rpm / self._operating_rpm
         raw = (
             self._base_amplitude
-            * spool_fraction
+            * self.spool_fraction
             * collective
             * (1.0 + self._deflection_factor * deflection)
+            * (1.0 + self._airspeed_factor * airspeed)
         )
         return max(0.0, min(1.0, raw))
 

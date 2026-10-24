@@ -87,3 +87,33 @@ def test_rejects_invalid_constructor_arguments(
 ) -> None:
     with pytest.raises(ValueError):
         RotorModel(*args)
+
+
+def test_amplitude_grows_with_airspeed_factor() -> None:
+    r = RotorModel(
+        300, 0, 850, base_amplitude=0.4, deflection_factor=0.5, airspeed_factor=0.6
+    )
+    r.step(0.01)
+    assert r.amplitude(1.0, 0.0, airspeed=0.5) == pytest.approx(0.4 * 1.3)
+    assert r.amplitude(1.0, 0.0) == pytest.approx(0.4)  # default airspeed 0
+
+
+def test_airspeed_factor_is_clamped_to_unit_range() -> None:
+    r = RotorModel(
+        300, 0, 850, base_amplitude=0.6, deflection_factor=1.0, airspeed_factor=2.0
+    )
+    r.step(0.01)
+    assert r.amplitude(1.0, 1.0, airspeed=1.0) == 1.0
+
+
+def test_take_over_copies_spool_fraction_into_this_rotor_speed() -> None:
+    r = RotorModel(250, 0, 850, 0.3, 0.5)
+    r.take_over(0.5, running=False)
+    assert (r.rpm, r.running, r.spool_fraction) == (125.0, False, 0.5)
+    r.take_over(1.7, running=True)
+    assert r.rpm == 250.0
+
+
+def test_rejects_negative_airspeed_factor() -> None:
+    with pytest.raises(ValueError, match="airspeed_factor"):
+        RotorModel(300, 0, 850, 0.3, 0.5, airspeed_factor=-0.1)
