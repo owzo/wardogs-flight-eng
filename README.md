@@ -9,6 +9,15 @@ point you set with a button, a rotor buzz through the grip, and weapon recoil,
 through a Moza AB9 or any other DirectInput force-feedback base. It is MIT
 licensed, Windows only, and Python 3.12+.
 
+> **⚠️ Not yet tested on real hardware.** Every force path in this program
+> has been verified only against a simulated SDL layer. The author's Moza AB9,
+> collective and pedals are still in shipment, so **no force has ever been
+> played on a physical base**. If you run it on yours before the first
+> hardware pass is reported here: keep a hand on the stick, keep the shipped
+> `force_ceiling` (0.6), start with `check-device` and the conformance test
+> described under "Hardware tuning pass", and treat every feel value as a
+> placeholder. You are the first test pilot.
+
 ## What this does and does not touch
 
 - It reads your own HID devices (your stick, pedals and collective).
