@@ -279,6 +279,27 @@ airspeed estimate rises and the buzz grows), clamps at 10 s, releases at
 rises to `clamp_friction` and the spring falls to 0 over `trim_slew_s` after
 the clamp, and both return after the release.
 
+To replay a flight of your own, record it first (this one needs your
+devices attached and a profile whose `device_map` names them):
+
+```
+wardogs-flight-eng record --profile my-bird.json --out my-flight.json --duration 60
+```
+
+`record` opens the devices in the profile's `device_map` and reads their
+raw axes and buttons at `--rate` Hz (default 100). It plays no force: it
+never opens the haptic side of the base, so the stick stays slack while
+you fly. It stops on Ctrl+C or after `--duration` seconds. The file holds
+every axis and button's starting value, then one step per tick in which an
+axis moved by at least `--min-change` (default 0.005, so a noisy axis does
+not write a step every tick) or a button flipped, and the profile's
+`device_map` verbatim. If a device drops out, the partial recording is
+still written and the command exits 2. Replay it with
+`wardogs-flight-eng dry-run --profile my-bird.json --scenario my-flight.json`.
+The replay uses the recorded `device_map`, calibration included, so run
+`calibrate` before recording; `record` warns when the calibration is still
+the shipped default.
+
 ## Moza Cockpit companion settings
 
 If you use a Moza base, Moza Cockpit and Flight Eng must not both drive the

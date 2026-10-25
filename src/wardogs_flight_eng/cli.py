@@ -2,9 +2,8 @@
 
 Exit codes: 0 ok; 1 usage, profile or configuration error (the message names
 the field or channel); 2 a device is missing or was lost. The subcommands
-live in ``cli_run``, ``cli_devices``, ``cli_calibrate``, ``cli_offline`` and
-``cli_preset``;
-output goes through ``cli_console.Console``.
+live in ``cli_run``, ``cli_devices``, ``cli_calibrate``, ``cli_offline``,
+``cli_preset`` and ``cli_record``; output goes through ``cli_console.Console``.
 """
 
 import argparse
@@ -27,6 +26,7 @@ from wardogs_flight_eng.cli_console import (
 from wardogs_flight_eng.cli_devices import check_device_command, list_devices_command
 from wardogs_flight_eng.cli_offline import dry_run_command, show_constants_command
 from wardogs_flight_eng.cli_preset import make_preset_command
+from wardogs_flight_eng.cli_record import record_command
 from wardogs_flight_eng.cli_run import run_command
 from wardogs_flight_eng.cockpit_preset import PresetError
 from wardogs_flight_eng.constants.loader import ConstantsError
@@ -49,6 +49,7 @@ COMMANDS: dict[str, Command] = {
     "calibrate": calibrate_command,
     "show-constants": show_constants_command,
     "make-preset": make_preset_command,
+    "record": record_command,
 }
 
 _CONFIG_ERRORS = (ProfileError, ConstantsError, InputConfigError, PresetError, OSError)
@@ -124,6 +125,17 @@ def _add_preset(sub: "argparse._SubParsersAction[_Parser]", common: _Parser) -> 
     )
 
 
+def _add_record(sub: "argparse._SubParsersAction[_Parser]", common: _Parser) -> None:
+    record = sub.add_parser("record", parents=[common], help="record raw controls")
+    record.add_argument("--profile", type=Path, required=True)
+    record.add_argument("--out", type=Path, required=True, help="scenario JSON")
+    record.add_argument("--rate", type=_positive_rate, default=100.0, help="Hz")
+    record.add_argument("--duration", type=float, help="seconds (default: Ctrl+C)")
+    record.add_argument(
+        "--min-change", type=float, default=0.005, help="smallest axis move kept"
+    )
+
+
 def build_parser() -> _Parser:
     common = _Parser(add_help=False)
     common.add_argument("--verbose", action="store_true", help="debug logging")
@@ -132,6 +144,7 @@ def build_parser() -> _Parser:
     _add_run(sub, common)
     _add_tools(sub, common)
     _add_preset(sub, common)
+    _add_record(sub, common)
     return parser
 
 

@@ -14,7 +14,9 @@ CLI_MODULES = {
         "cli_devices",
         "cli_interrupt",
         "cli_offline",
+        "cli_preset",
         "cli_profiles",
+        "cli_record",
         "cli_run",
         "cli_run_checks",
     )
