@@ -371,6 +371,18 @@ def test_take_over_resets_a_locked_force_trim_anchor() -> None:
     assert all(c.center == 0.0 for c in cmds if isinstance(c, SpringCommand))
 
 
+def test_take_over_from_itself_keeps_a_locked_anchor() -> None:
+    lak = engine_for("lakota")
+    lak.step(0.01, frame(0.5, 0.5, 0, 0, Button.TRIM_LOCK))
+    for _ in range(50):
+        before = lak.step(0.01, frame(0.5, 0.5))
+    lak.take_over(lak)
+    after = lak.step(0.01, frame(0.5, 0.5))
+    centers = [c.center for c in before if isinstance(c, SpringCommand)]
+    assert centers and all(c != 0.0 for c in centers)
+    assert [c.center for c in after if isinstance(c, SpringCommand)] == centers
+
+
 def test_take_over_carries_the_latch_and_held_buttons() -> None:
     lb, lak = engine_for("littlebird-miniguns"), engine_for("lakota")
     lb.step(0.01, frame(0, 0, 0, 0, Button.ALL_OFF))

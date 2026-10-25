@@ -233,6 +233,32 @@ def test_profile_cycle_hands_over_through_take_over(
     assert backend.applied[3:] == [[AllOffCommand()], [AllOffCommand()]]
 
 
+def test_profile_cycle_with_one_profile_keeps_the_trim_and_forces(
+    engine_lakota: FlightEngine,
+    source: CompositeInput,
+    backend: RecordingBackend,
+    devices: Devices,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO)
+    engine_lakota.step(
+        0.01, ControlFrame(0.5, 0.5, 0, 0, frozenset({Button.TRIM_LOCK}))
+    )
+    for _ in range(50):  # the anchor slews fully to (0.5, 0.5)
+        engine_lakota.step(0.01, ControlFrame(0.5, 0.5, 0, 0, frozenset()))
+    script = ButtonScript(devices, [set(), {PROFILE_CYCLE_IDX}, set()])
+    r = run([engine_lakota], source, backend, sleep=script, max_ticks=3)
+    centers = [
+        [c.center for c in tick if isinstance(c, SpringCommand)]
+        for tick in backend.applied
+    ]
+    assert centers[0] and all(c != 0.0 for c in centers[0])
+    assert centers == [centers[0]] * 3
+    assert r.active_profile == "lakota"
+    assert backend.events == ["apply", "apply", "apply", "all_off", "close"]
+    assert "only one profile loaded" in caplog.text
+
+
 def _sine_hz(commands: list[Command]) -> list[float]:
     return [c.frequency_hz for c in commands if isinstance(c, SineCommand)]
 

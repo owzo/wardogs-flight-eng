@@ -92,7 +92,10 @@ class FlightEngine:
         The feel restarts centred and free, the airspeed estimate at rest and
         the weapon idle; the rotor adopts the outgoing spool fraction and
         running flag; the ALL_OFF latch and the held buttons carry over.
+        Taking over from itself is a no-op.
         """
+        if outgoing is self:
+            return
         self._feel.restart()
         self._estimator.restart()
         self._state = _AT_REST

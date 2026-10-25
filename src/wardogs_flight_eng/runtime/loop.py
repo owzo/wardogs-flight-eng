@@ -85,7 +85,14 @@ class _Tick:
         self._wait(t)
 
     def _cycle_profile(self) -> None:
-        """Zero forces and hand control to the next engine (``take_over``)."""
+        """Zero forces and hand control to the next engine (``take_over``).
+
+        With one engine loaded there is nothing to switch to: the tap is
+        ignored, so forces and a held trim stay as they are.
+        """
+        if len(self._engines) == 1:
+            log.info("profile_cycle ignored: only one profile loaded")
+            return
         self._backend.all_off()
         outgoing = self.engine
         self._index = (self._index + 1) % len(self._engines)
