@@ -144,3 +144,22 @@ def test_a_forced_interrupt_still_writes_the_partial_file(
     result = invoke(_record(profile, out), api=fake)
     assert result.code == 1 and Scenario.load(out).duration_s > 0.0
     assert joysticks_released(fake)
+
+
+def test_record_refuses_to_overwrite_its_profile(profile: Path) -> None:
+    before = profile.read_bytes()
+    fake = FakeSdl(stick(), pedals())
+    result = invoke(_record(profile, profile, "--duration", "0.02"), api=fake)
+    assert result.code == 1
+    assert f"--out {profile}: refuses to overwrite the profile it reads" in (
+        result.output
+    )
+    assert profile.read_bytes() == before
+    assert fake.count("SDL_JoystickOpen") == 0
+
+
+def test_record_leaves_no_staging_file(profile: Path, tmp_path: Path) -> None:
+    out = tmp_path / "flight.json"
+    args = _record(profile, out, "--duration", "0.02")
+    assert invoke(args, api=FakeSdl(stick(), pedals())).code == 0
+    assert out.exists() and not list(tmp_path.glob("*.tmp"))

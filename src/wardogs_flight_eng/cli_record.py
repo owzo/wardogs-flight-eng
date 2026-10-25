@@ -8,6 +8,7 @@ device is opened and no force is commanded.
 import argparse
 import json
 import logging
+import os
 import threading
 import time
 from dataclasses import dataclass
@@ -23,11 +24,7 @@ from wardogs_flight_eng.engine.device_map import Calibration, DeviceMap
 from wardogs_flight_eng.inputs.protocol import DeviceLostError
 from wardogs_flight_eng.inputs.sdl_api import SdlError
 from wardogs_flight_eng.inputs.sdl_device import SdlDevice
-from wardogs_flight_eng.runtime.recorder import (
-    DeviceSnapshot,
-    ScenarioRecorder,
-    replay_end,
-)
+from wardogs_flight_eng.runtime.recorder import DeviceSnapshot, ScenarioRecorder
 
 log = logging.getLogger(__name__)
 
@@ -46,7 +43,7 @@ class _Session:
         return self.ticks / self.rate_hz
 
     def finish(self, device_map: DeviceMap) -> dict[str, Any]:
-        return self.recorder.finish(replay_end(self.ticks, self.rate_hz), device_map)
+        return self.recorder.finish(self.ticks / self.rate_hz, device_map)
 
 
 def min_change_arg(text: str) -> float:
@@ -95,9 +92,16 @@ def _capture(
 
 
 def _write(path: Path, document: dict[str, Any]) -> None:
+    """Write via a staging file and ``os.replace``: never a truncated file."""
     path.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(document, indent=2, allow_nan=False) + "\n"
-    path.write_text(text, encoding="utf-8", newline="\n")
+    staging = path.with_name(f"{path.name}.tmp")
+    try:
+        staging.write_text(text, encoding="utf-8", newline="\n")
+        os.replace(staging, path)
+    except OSError:
+        staging.unlink(missing_ok=True)
+        raise
     log.info("scenario written to %s", path)
 
 
@@ -129,9 +133,11 @@ def _device_map(args: argparse.Namespace) -> DeviceMap:
 
 def record_command(args: argparse.Namespace, ctx: CliContext) -> int:
     """Record to ``--out``; on device loss write the partial file and re-raise."""
+    out: Path = args.out
+    if out.resolve() == args.profile.resolve():
+        raise CliError(f"--out {out}: refuses to overwrite the profile it reads")
     max_ticks = _checked_settings(args)
     device_map = _device_map(args)
-    out: Path = args.out
     session = _Session(
         ScenarioRecorder(args.rate, args.min_change), args.rate, max_ticks
     )

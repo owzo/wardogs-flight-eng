@@ -1,18 +1,14 @@
 """``ScenarioRecorder``: raw device snapshots become a replayable scenario."""
 
 import json
-import math
 from pathlib import Path
 
 from cli_support import BOUND_MAP
 
 from wardogs_flight_eng.engine.device_map import DeviceMap
 from wardogs_flight_eng.inputs.simulated import Scenario
-from wardogs_flight_eng.runtime.recorder import (
-    DeviceSnapshot,
-    ScenarioRecorder,
-    replay_end,
-)
+from wardogs_flight_eng.runtime.dry_run import replay_ticks
+from wardogs_flight_eng.runtime.recorder import DeviceSnapshot, ScenarioRecorder
 
 DEVICE_MAP = DeviceMap.model_validate(BOUND_MAP)
 
@@ -98,16 +94,14 @@ def test_a_step_replays_on_its_own_tick_at_120_hz(tmp_path: Path) -> None:
     assert scenario.devices["base"].axes[0] == 0.0
     scenario.apply_until(2 / 120)
     assert scenario.devices["base"].axes[0] == 0.5
-    assert int(scenario.duration_s * 120.0) == 7
+    assert replay_ticks(scenario) == 7
 
 
-def test_replay_end_multiplies_back_to_exactly_the_tick_count() -> None:
-    assert int((123 / 30) * 30) == 122  # the truncation replay_end guards against
-    for rate in (30.0, 60.0, 100.0, 120.0, 144.0, 300.0):
-        for ticks in range(5000):
-            end = replay_end(ticks, rate)
-            assert int(end * rate) == ticks
-            assert 0.0 <= end - ticks / rate <= math.ulp(end)
+def test_a_closing_step_never_precedes_the_last_step() -> None:
+    r = ScenarioRecorder(100.0, 0.005)
+    r.begin(0.0, {"base": _snap(0.0)})
+    r.observe(0.05, {"base": _snap(0.5)})
+    assert r.finish(0.03, DEVICE_MAP)["steps"][-1] == {"t": 0.05, "set": {}}
 
 
 def test_zero_min_change_records_any_change_but_skips_unchanged_axes() -> None:

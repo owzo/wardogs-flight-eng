@@ -9,7 +9,6 @@ tick ``n`` reads ``n / rate_hz``, and JSON floats round-trip exactly, so a
 step recorded at that time is applied on that same tick.
 """
 
-import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -30,19 +29,6 @@ class DeviceSnapshot:
 
     axes: tuple[float, ...]
     buttons: tuple[bool, ...]
-
-
-def replay_end(ticks: int, rate_hz: float) -> float:
-    """The closing ``t`` for ``ticks``: ``int(t * rate_hz)`` is exactly ``ticks``.
-
-    ``ticks / rate_hz`` can multiply back to just under ``ticks`` (e.g. 123
-    at 30 Hz), which a replay truncating ``duration * rate`` would read as
-    one tick fewer; one ulp up is always enough.
-    """
-    end = ticks / rate_hz
-    if int(end * rate_hz) < ticks:
-        end = math.nextafter(end, math.inf)
-    return end
 
 
 def _values(snapshot: Mapping[str, DeviceSnapshot]) -> dict[str, Value]:
@@ -98,7 +84,13 @@ class ScenarioRecorder:
         return moved > 0 and moved >= self._min_change
 
     def finish(self, t: float, device_map: DeviceMap) -> dict[str, Any]:
-        """Close with an empty step at ``t``; return the scenario document."""
+        """Close with an empty step at ``t``; return the scenario document.
+
+        ``t`` is raised to the last step's time if earlier, so a late closing
+        time can never make the steps go back in time (an unloadable file).
+        """
+        if self._steps:
+            t = max(float(t), self._steps[-1]["t"])
         self._steps.append({"t": float(t), "set": {}})
         return {
             "rate_hz": self._rate_hz,

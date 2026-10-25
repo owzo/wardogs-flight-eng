@@ -139,3 +139,18 @@ def test_dry_run_lakota_conditions_are_constant(tmp_path: Path) -> None:
     ]
     assert dampers == {0.25}
     assert frictions and frictions == pytest.approx([0.05] * len(frictions))
+
+
+def test_dry_run_rounds_a_hand_written_duration_to_whole_ticks(
+    tmp_path: Path,
+) -> None:
+    raw = json.loads((SCENARIOS / "takeoff-trim-fire.json").read_text())
+    raw["rate_hz"] = 30.0
+    raw["steps"] = [raw["steps"][0], {"t": 4.1, "set": {}}]  # 4.1 * 30 < 123
+    path = tmp_path / "short.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    scenario = Scenario.load(path)
+    log, _ = dry_run(
+        profile("littlebird-miniguns"), load_constants(), scenario, tmp_path
+    )
+    assert len({r["t"] for r in _rows(log)}) == 123

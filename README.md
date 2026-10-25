@@ -288,8 +288,9 @@ wardogs-flight-eng record --profile my-bird.json --out my-flight.json --duration
 
 `record` opens the devices in the profile's `device_map` and reads their
 raw axes and buttons at `--rate` Hz (default 100). It plays no force: it
-never opens the haptic side of the base, so the stick stays slack while
-you fly. It stops on Ctrl+C or after `--duration` seconds. The file holds
+never opens the haptic side of the base, so Flight Eng adds no force while
+you fly, though whatever Moza Cockpit's own settings apply still does. It
+stops on Ctrl+C or after `--duration` seconds. The file holds
 every axis and button's starting value, then one step per tick in which an
 axis moved by at least `--min-change` (default 0.005, so a noisy axis does
 not write a step every tick) or a button flipped, and the profile's

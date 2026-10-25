@@ -83,3 +83,29 @@ def test_make_preset_division_b_refusal_exits_1(tmp_path: Path) -> None:
 def test_make_preset_rejects_an_unknown_division(tmp_path: Path) -> None:
     result = invoke(_make(FIXTURE, tmp_path / "new.preset", "C"))
     assert result.code == 1 and "invalid choice" in result.output
+
+
+def test_make_preset_reads_a_bom_prefixed_template(tmp_path: Path) -> None:
+    template = tmp_path / "bom.preset"
+    template.write_bytes(b"\xef\xbb\xbf" + FIXTURE.read_bytes())
+    out = tmp_path / "new.preset"
+    result = invoke(_make(template, out))
+    assert result.code == 0, result.output
+    assert json.loads(out.read_text(encoding="utf-8"))["device_params"]
+
+
+def test_make_preset_refuses_to_overwrite_its_template(tmp_path: Path) -> None:
+    template = tmp_path / "mine.preset"
+    template.write_bytes(FIXTURE.read_bytes())
+    result = invoke(_make(template, template))
+    assert result.code == 1
+    assert f"--out {template}: refuses to overwrite the template it reads" in (
+        result.output
+    )
+    assert template.read_bytes() == FIXTURE.read_bytes()
+
+
+def test_make_preset_leaves_no_staging_file(tmp_path: Path) -> None:
+    out = tmp_path / "new.preset"
+    assert invoke(_make(FIXTURE, out)).code == 0
+    assert out.exists() and not list(tmp_path.glob("*.tmp"))

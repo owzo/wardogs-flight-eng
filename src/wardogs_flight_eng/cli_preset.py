@@ -8,6 +8,7 @@ Reads the user's own Cockpit export as the template, rewrites it with
 import argparse
 import json
 import logging
+import os
 import time
 import uuid
 from pathlib import Path
@@ -23,7 +24,7 @@ log = logging.getLogger(__name__)
 
 def _read_template(path: Path) -> dict[str, Any]:
     try:
-        text = path.read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8-sig")
     except OSError as err:
         raise CliError(f"cannot read template {path}: {err.strerror}") from err
     try:
@@ -36,10 +37,14 @@ def _read_template(path: Path) -> dict[str, Any]:
 
 
 def _write_preset(path: Path, document: dict[str, Any]) -> None:
+    """Write via a staging file and ``os.replace``: never a truncated preset."""
     text = json.dumps(document, indent=4, ensure_ascii=False) + "\n"
+    staging = path.with_name(f"{path.name}.tmp")
     try:
-        path.write_text(text, encoding="utf-8", newline="\n")
+        staging.write_text(text, encoding="utf-8", newline="\n")
+        os.replace(staging, path)
     except OSError as err:
+        staging.unlink(missing_ok=True)
         raise CliError(f"cannot write preset {path}: {err.strerror}") from err
     log.info("Moza Cockpit preset written to %s", path)
 
@@ -50,6 +55,9 @@ def _shown(value: object) -> str:
 
 def make_preset_command(args: argparse.Namespace, ctx: CliContext) -> int:
     """Write the preset to ``--out``; print every changed key and the path."""
+    out: Path = args.out
+    if out.resolve() == args.template.resolve():
+        raise CliError(f"--out {out}: refuses to overwrite the template it reads")
     profile = load_checked_profile(args.profile, load_constants())
     template = _read_template(args.template)
     document, changes = rewrite_preset(
@@ -60,7 +68,6 @@ def make_preset_command(args: argparse.Namespace, ctx: CliContext) -> int:
         now=int(time.time()),
         new_uuid=f"{{{uuid.uuid4()}}}",
     )
-    out: Path = args.out
     _write_preset(out, document)
     ctx.console.line(
         f"division {args.division} for profile {profile.name!r} ({profile.feel.mode})"

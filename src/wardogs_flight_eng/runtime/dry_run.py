@@ -57,6 +57,14 @@ class _ScenarioInput(CompositeInput):
         return super().read()
 
 
+def replay_ticks(scenario: Scenario) -> int:
+    """Ticks a dry run plays: ``duration_s * rate_hz`` rounded to whole ticks.
+
+    Rounded, not truncated: 4.1 s at 30 Hz multiplies to 122.999..., 123 ticks.
+    """
+    return round(scenario.duration_s * scenario.rate_hz)
+
+
 def dry_run(
     profile: Profile,
     constants: GameConstants,
@@ -65,7 +73,7 @@ def dry_run(
 ) -> tuple[Path, Path]:
     """Run ``scenario`` through ``profile``'s engine; return (log, plot) paths.
 
-    The loop runs ``int(duration_s * rate_hz)`` ticks with the profile's own
+    The loop runs ``replay_ticks(scenario)`` ticks with the profile's own
     watchdog, logging every command to ``out_dir/forces.jsonl``, then renders
     ``out_dir/forces.html``. ``out_dir`` is created if missing. A run that
     ends any other way than by exhausting its ticks raises ``RuntimeError``.
@@ -83,7 +91,7 @@ def dry_run(
         watchdog_s=profile.safety.watchdog_s,
         clock=clock,
         sleep=clock.sleep,
-        max_ticks=int(scenario.duration_s * scenario.rate_hz),
+        max_ticks=replay_ticks(scenario),
     )
     log.info("dry run: %d ticks, stopped by %s", result.ticks, result.stopped_by)
     if result.stopped_by != "max_ticks":
