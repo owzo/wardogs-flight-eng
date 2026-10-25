@@ -110,22 +110,28 @@ def test_sdl_failure_mid_run_exits_2_and_releases(profile: Path) -> None:
     released(fake)
 
 
+@pytest.fixture
+def steady_profile(tmp_path: Path) -> Path:
+    """The bound profile with an instant spool-up, so the rotor sine is constant."""
+    document = bound_document()
+    document["rotor"]["spool_up_s"] = 0.0  # a spooling rotor changes every tick
+    return write_profile(tmp_path / "steady.json", document)
+
+
 def updates_while_running(fake: TickingSdl) -> int:
     """Effect updates before the teardown's first ``SDL_HapticStopAll``."""
     names = fake.names()
     return names[: names.index("SDL_HapticStopAll")].count("SDL_HapticUpdateEffect")
 
 
-def test_run_with_refresh_flag_updates_every_tick(profile: Path) -> None:
+def test_run_with_refresh_flag_updates_every_tick(steady_profile: Path) -> None:
     fake = TickingSdl(stick(), pedals(), after=20, then=detach_all)
-    invoke(["run", "--profile", str(profile), "--refresh-every-tick"], api=fake)
-    assert updates_while_running(fake) >= 40  # >= 4 persistent effects x >= 10 ticks
+    args = ["run", "--profile", str(steady_profile), "--refresh-every-tick"]
+    invoke(args, api=fake)
+    assert updates_while_running(fake) >= 40  # 10 persistent effects x ~19 ticks
 
 
-def test_run_without_refresh_flag_updates_only_on_change(tmp_path: Path) -> None:
-    document = bound_document()
-    document["rotor"]["spool_up_s"] = 0.0  # a spooling rotor changes every tick
-    steady = write_profile(tmp_path / "steady.json", document)
+def test_run_without_refresh_flag_updates_only_on_change(steady_profile: Path) -> None:
     fake = TickingSdl(stick(), pedals(), after=20, then=detach_all)
-    invoke(["run", "--profile", str(steady)], api=fake)
+    invoke(["run", "--profile", str(steady_profile)], api=fake)
     assert updates_while_running(fake) < 10

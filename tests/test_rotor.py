@@ -129,9 +129,9 @@ def test_buzz_below_the_floor_is_silenced() -> None:
 
 
 def test_buzz_at_the_floor_plays() -> None:
-    r = RotorModel(300, 0, 850, 0.4, 0.0, min_amplitude=0.1)
+    r = RotorModel(300, 0, 850, 0.5, 0.0, min_amplitude=0.25)
     r.step(0.01)
-    assert r.amplitude(0.25, 0.0) == pytest.approx(0.1)
+    assert r.amplitude(0.5, 0.0) == 0.25  # exactly representable: the >= edge
 
 
 @pytest.mark.parametrize("floor", [-0.1, 1.1])
