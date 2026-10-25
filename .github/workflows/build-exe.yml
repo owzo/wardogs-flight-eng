@@ -23,7 +23,7 @@ jobs:
         shell: pwsh
         run: |
           $hash = (Get-FileHash dist/wardogs-flight-eng.exe -Algorithm SHA256).Hash.ToLower()
-          "$hash  wardogs-flight-eng.exe" | Out-File dist/SHA256SUMS -Encoding ascii
+          [IO.File]::WriteAllText("$PWD/dist/SHA256SUMS", "$hash  wardogs-flight-eng.exe`n")
       - uses: actions/upload-artifact@v4
         with:
           name: wardogs-flight-eng-${{ github.ref_name }}

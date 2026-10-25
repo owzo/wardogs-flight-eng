@@ -27,3 +27,10 @@ def test_tag_workflow_builds_and_uploads_the_exe() -> None:
     assert "dist/wardogs-flight-eng.exe" in text
     assert "SHA256SUMS" in text
     assert "upload-artifact" in text
+
+
+def test_sha256sums_is_written_with_lf_only() -> None:
+    text = (WORKFLOWS / "build-exe.yml").read_text(encoding="utf-8")
+    step = text.split("- name: Write SHA256SUMS", 1)[1].split("- uses:", 1)[0]
+    assert "WriteAllText" in step and "`n" in step
+    assert "Out-File" not in step
