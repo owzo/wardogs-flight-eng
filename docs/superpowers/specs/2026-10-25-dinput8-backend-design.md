@@ -261,6 +261,24 @@ tests/test_dinput_hardware.py  WFE_HARDWARE=1 conformance (skipped)
 7. **`--refresh-every-tick`** (from the backlog spec) is an SDL option;
    with `--backend dinput8` it is a usage error.
 
+8. **Sine phase clock (amended after Task 5's review).** The backend
+   re-anchors the sine phase clock on every send, as SDL's
+   `PersistentSines` does: the uploaded effect always carries the phase the
+   waveform has reached, because `HeldEffects` only learns whether the
+   driver restarted after the effect is built, and holding the phase
+   between `Start`s made `due` true every tick. This is continuous across
+   a fallback restart, the half-life re-run and a steady sine, and it is
+   an **unverified assumption** for an in-place update (continuous only if
+   the driver ignores `dwPhase` while playing or treats it as the current
+   phase; a firmware that applies it from the last `Start` would jump on
+   every send) and for an in-place period change during spool-up. The
+   hardware test carries a magnitude ramp and a spool-up frequency sweep
+   to tell these apart; if the AB9 shows the jump, the backend switches to
+   holding the phase between `Start`s using `HeldEffects.restarted`, which
+   is kept for that purpose. Rulings 2's phrase "applying the sine phase
+   carry" and the Architecture bullet "applies only then" are superseded
+   by this ruling.
+
 ## Left to the builder
 
 - The exact ctypes struct layouts and vtable indices (from the DirectInput 8
