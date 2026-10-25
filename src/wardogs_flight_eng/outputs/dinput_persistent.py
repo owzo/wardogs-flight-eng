@@ -93,7 +93,14 @@ class HeldEffects:
 
     def restarted(self, key: EffectKey) -> bool:
         """Whether the last ``play`` of ``key`` (re)started the effect from its
-        start, so a sine's phase carry must re-anchor there."""
+        start; valid only immediately after that ``play``.
+
+        No production code calls this today: ``HeldSines`` re-anchors its
+        phase clock on every send. It is kept as the hook for switching the
+        sines to hold their phase between ``Start`` calls (re-anchoring only
+        when this is true) if the hardware shows a phase jump on in-place
+        updates.
+        """
         return key in self._restarted
 
     def silence(self, failures: list[ForceFailure]) -> None:

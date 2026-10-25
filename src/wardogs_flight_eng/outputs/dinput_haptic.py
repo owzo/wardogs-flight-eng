@@ -3,6 +3,7 @@
 import logging
 import math
 from collections.abc import Sequence
+from functools import partial
 from typing import assert_never
 
 from wardogs_flight_eng.engine.commands import (
@@ -122,15 +123,23 @@ class DInputHapticBackend:
             self._release()
 
     def _release(self) -> None:
-        """Each release runs even if an earlier one raises."""
+        """Release every effect, then the device and DirectInput.
+
+        Each effect release is attempted even if an earlier one fails, and the
+        device and DirectInput are released whatever happens; the first
+        effect-release failure is raised afterwards.
+        """
+        failures: list[ForceFailure] = []
         try:
             for effect_id in self._effect_ids():
-                self._channel.release(effect_id)
+                attempt(failures, partial(self._channel.release, effect_id))
         finally:
             try:
                 self._joystick.close()
             finally:
                 self._joystick.api.close()
+        if failures:
+            raise failures[0]
 
     def _dispatch(self, t: float, command: Command) -> None:
         match command:

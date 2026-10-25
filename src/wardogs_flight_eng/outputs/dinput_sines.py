@@ -9,12 +9,22 @@ the clock is anchored there with the new period:
 - when the send (re)started the effect (``HeldEffects.restarted``: creation,
   a start after ``all_off`` or at the half-life, or a restarting update), the
   device restarts from exactly that phase, so the waveform stays continuous;
-- when the send was an in-place update, the waveform keeps playing through
-  it, so its phase at that instant is the reached phase anyway and anchoring
-  there only moves the clock onto the new period from that instant on.
+- when the send was an in-place update, the clock is anchored the same way,
+  which assumes the driver either ignores ``dwPhase`` on a playing effect or
+  takes it as the current phase: then the waveform's phase at that instant
+  is the reached phase, and the anchor only moves the clock onto the new
+  period from then on.
 
-Both cases anchor the same way, and the phase must be in the effect before
-the send (a refused in-place update is retried as a restart inside
+That assumption about the driver is unverified. A firmware that instead
+applies ``dwPhase`` from the last ``Start`` would jump the waveform on every
+in-place send; the rotor magnitude changes nearly every tick, so this would be
+felt as roughly doubled frequency and a staircase in the buzz. The hardware
+pass checks it with a magnitude ramp (Task 7's hardware test). If the base
+shows the jump, the fallback is to hold the phase between ``Start`` calls,
+using ``HeldEffects.restarted`` to re-anchor only on a real (re)start.
+
+Both cases anchor the same way today, and the phase must be in the effect
+before the send (a refused in-place update is retried as a restart inside
 ``HeldEffects``), so ``HeldEffects.restarted`` is not consulted. Anchoring at
 every send also keeps the held effect equal to the steady effect ``due``
 compares it with, so an unchanged sine is sent again only at its half-life or
@@ -59,7 +69,12 @@ class PhaseClock:
 
 
 class HeldSines:
-    """Each axis's rotor sine, held in ``held`` under ``("sine", axis)``."""
+    """Each axis's rotor sine, held in ``held`` under ``("sine", axis)``.
+
+    Every send carries the phase the clock says the waveform has reached and
+    re-anchors the clock there, assuming the driver keeps an in-place update
+    continuous (see the module docstring for the failure mode and its check).
+    """
 
     def __init__(self, axes: HapticAxisMap, held: HeldEffects, length_us: int) -> None:
         self._axes = axes
