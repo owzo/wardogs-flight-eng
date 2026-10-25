@@ -57,6 +57,7 @@ class FlightEngine:
         self._state = _AT_REST
         self._previous_held: frozenset[Button] = frozenset()
         self._all_off = False
+        self._trim_lock_blocked = False
 
     @property
     def profile(self) -> Profile:
@@ -80,6 +81,7 @@ class FlightEngine:
         the weapon idle; the rotor adopts the outgoing spool fraction and
         running flag; the ALL_OFF latch and the held buttons carry over, so a
         button held across the switch (ALL_OFF above all) is not a fresh tap.
+        A trim lock held across the switch is ignored until released once.
         Taking over from itself is a no-op.
         """
         if outgoing is self:
@@ -91,6 +93,7 @@ class FlightEngine:
         self._weapon, self._pulse_s = build_weapon(self._profile, self._constants)
         self._all_off = outgoing._all_off
         self._previous_held = outgoing._previous_held
+        self._trim_lock_blocked = Button.TRIM_LOCK in outgoing._previous_held
 
     def step(self, dt: float, frame: ControlFrame) -> list[Command]:
         """Advance ``dt`` seconds and return this tick's commands.
@@ -105,6 +108,8 @@ class FlightEngine:
             self._all_off = not self._all_off
         if self._all_off or not (0.0 <= dt <= self._profile.safety.watchdog_s):
             return [AllOffCommand()]
+        if self._trim_lock_blocked and Button.TRIM_LOCK not in frame.held:
+            self._trim_lock_blocked = False
         self._dispatch(taps, frame)
         self._feel.step(dt)
         self._rotor.step(dt)
@@ -113,8 +118,12 @@ class FlightEngine:
         return [*self._feel.conditions(), *self._buzz(), *recoil]
 
     def _dispatch(self, taps: frozenset[Button], frame: ControlFrame) -> None:
-        """Apply the trim and rotor taps of this tick."""
-        if Button.TRIM_LOCK in taps:
+        """Apply this tick's trim (taps, or the held level) and rotor taps."""
+        trim_lock_live = not self._trim_lock_blocked
+        if self._profile.feel.trim_style == "hold":
+            pressed = trim_lock_live and Button.TRIM_LOCK in frame.held
+            self._feel.hold(pressed, frame.pitch, frame.roll)
+        elif trim_lock_live and Button.TRIM_LOCK in taps:
             self._feel.lock(frame.pitch, frame.roll)
         if Button.TRIM_RESET in taps:
             self._feel.reset()

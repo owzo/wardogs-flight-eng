@@ -6,6 +6,12 @@ lets trim-lock blend in a clamp: the spring fades out while friction rises to
 ``clamp_friction``, and trim-reset blends it back. The clamp blend moves at a
 fixed rate of ``1 / trim_slew_s`` per second from wherever it is, unlike
 ``TrimState`` whose every move takes the full slew time.
+
+In the ``hold`` trim style ``hold`` is called every tick with the button
+level instead of ``lock``: force_trim slackens the spring toward 0 while held
+(the anchor stays) and on release anchors at the stick and re-stiffens, both
+through a blend at the same fixed rate; unboosted clamps only while held and
+``reset`` does nothing, since nothing is latched.
 """
 
 from wardogs_flight_eng.engine.commands import (
@@ -59,7 +65,10 @@ class FeelModel:
         self._feel = feel
         self._unboosted = feel.mode == "unboosted"
         self._trim = TrimState(feel.trim_slew_s)
+        self._hold_style = feel.trim_style == "hold"
         self._blend = _Blend(feel.trim_slew_s)
+        self._slack = _Blend(feel.trim_slew_s)
+        self._held = False
 
     @property
     def center_pitch(self) -> float:
@@ -76,6 +85,11 @@ class FeelModel:
         """Clamp blend ``0..1`` (always 0 in ``force_trim`` mode)."""
         return self._blend.value
 
+    @property
+    def slack(self) -> float:
+        """Spring slack ``0..1`` while trim is held (always 0 when unboosted)."""
+        return 0.0 if self._unboosted else self._slack.value
+
     def lock(self, pitch: float, roll: float) -> None:
         """Trim-lock: anchor at the stick (force_trim) or clamp it (unboosted)."""
         if self._unboosted:
@@ -83,29 +97,54 @@ class FeelModel:
             return
         self._trim.lock(pitch, roll)
 
+    def hold(self, pressed: bool, pitch: float, roll: float) -> None:
+        """Hold-style trim with the button level: slack or clamp while pressed.
+
+        force_trim: on the pressed-to-released edge the anchor moves to the
+        stick ``(pitch, roll)`` as the spring re-stiffens. unboosted: the stick
+        position is unused.
+        """
+        released = self._held and not pressed
+        self._held = pressed
+        target = _CLAMPED if pressed else _FREE
+        if self._unboosted:
+            self._blend.retarget(target)
+            return
+        self._slack.retarget(target)
+        if released:
+            self._trim.lock(pitch, roll)
+
     def reset(self) -> None:
-        """Trim-reset: anchor to origin (force_trim) or free the stick (unboosted)."""
+        """Trim-reset: anchor to origin (force_trim) or free the stick (unboosted).
+
+        A no-op for an unboosted feel in the hold style: nothing is latched.
+        """
+        if self._unboosted and self._hold_style:
+            return
         if self._unboosted:
             self._blend.retarget(_FREE)
             return
         self._trim.reset()
 
     def step(self, dt: float) -> None:
-        """Advance the anchor slew or the clamp blend by ``dt`` seconds."""
+        """Advance the anchor slew and slack, or the clamp blend, by ``dt`` s."""
         if self._unboosted:
             self._blend.step(dt)
             return
         self._trim.step(dt)
+        self._slack.step(dt)
 
     def restart(self) -> None:
-        """Return to the initial state at once: centred, clamp off, no slew."""
+        """Return to the initial state at once: centred, clamp off, no slack."""
         self._trim = TrimState(self._feel.trim_slew_s)
         self._blend = _Blend(self._feel.trim_slew_s)
+        self._slack = _Blend(self._feel.trim_slew_s)
+        self._held = False
 
     def conditions(self) -> list[Command]:
         """Spring, friction, damper and inertia, each pitch then roll."""
         feel = self._feel
-        spring = feel.spring_coefficient
+        spring = feel.spring_coefficient * (1.0 - self.slack)
         friction = feel.friction
         if self._unboosted:
             assert feel.clamp_friction is not None  # Feel requires it when unboosted

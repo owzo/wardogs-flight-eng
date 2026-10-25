@@ -151,7 +151,7 @@ What the seven buttons do:
 
 | Button | Tap or hold | Effect |
 |---|---|---|
-| `trim_lock` | tap | `force_trim`: the spring centre moves to where the stick is now; `unboosted`: clamps the stick where it is (see "Feel modes") |
+| `trim_lock` | tap | `force_trim`: the spring centre moves to where the stick is now; `unboosted`: clamps the stick where it is (see "Feel modes"; with `feel.trim_style` `hold` it acts while held instead) |
 | `trim_reset` | tap | `force_trim`: the spring centre returns to origin; `unboosted`: releases the clamp |
 | `fire` | hold | recoil pulses after the weapon's wind-up (profiles with a pilot weapon) |
 | `reload` | tap | silences recoil for the weapon's reload time |
@@ -351,6 +351,20 @@ centre. `trim_lock` engages a clamp: over `trim_slew_s` the spring fades to
 you leave it and re-holds if you push it somewhere else. `trim_reset`
 releases the clamp the same way. A lock while clamped, or a reset while
 free, does nothing. Damper and inertia are constant.
+
+**Trim styles.** `feel.trim_style` (optional, default `tap`) picks how the
+`trim_lock` button acts. `tap` is the 0.2.0 behaviour described above: each
+press locks. In `hold`, the button acts while it is held. In `force_trim`
+mode, holding it lets the spring go slack (it fades to 0 over
+`trim_slew_s`; the anchor stays put), and letting go anchors the spring
+where the stick is at that instant and stiffens it back over `trim_slew_s`;
+a release part-way through picks up from where the fade had got to.
+`trim_reset` still returns the anchor to origin. In `unboosted` mode the
+clamp is momentary: engaged while the button is held, released when you let
+go, each over `trim_slew_s`; `trim_reset` does nothing, since nothing stays
+latched. A `trim_lock` held through a profile switch is ignored until you
+release it once, so the incoming profile never starts slack or clamped. The
+shipped profiles use `tap`.
 
 **The stopping band.** Friction has no centre: it resists motion
 everywhere. A released stick therefore stops wherever the spring's pull has

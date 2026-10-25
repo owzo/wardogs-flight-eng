@@ -112,3 +112,14 @@ def test_estimator_threshold_below_one() -> None:
 
 def test_min_amplitude_defaults_to_zero_in_shipped_profiles() -> None:
     assert load_profile(PROFILES / "havoc.json").rotor.min_amplitude == 0.0
+
+
+def test_trim_style_defaults_to_tap_and_rejects_others() -> None:
+    for name in ("littlebird-miniguns", "littlebird-rockets", "lakota", "havoc"):
+        assert load_profile(PROFILES / f"{name}.json").feel.trim_style == "tap"
+    raw = raw_profile("lakota")
+    raw["feel"]["trim_style"] = "hold"
+    assert Profile.from_document(raw).feel.trim_style == "hold"
+    raw["feel"]["trim_style"] = "toggle"
+    with pytest.raises(ProfileError, match="trim_style"):
+        Profile.from_document(raw)

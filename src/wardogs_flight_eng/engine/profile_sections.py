@@ -19,12 +19,17 @@ FeelMode = Literal["force_trim", "unboosted"]
 """``force_trim``: spring re-centred by trim lock. ``unboosted``: centre fixed,
 trim lock blends the spring into ``clamp_friction``."""
 
+TrimStyle = Literal["tap", "hold"]
+"""``tap``: trim lock and reset act on a press. ``hold``: trim lock acts while
+held (force_trim: spring slack, release re-anchors; unboosted: momentary clamp)."""
+
 
 class Feel(ProfileModel):
     """Centring spring plus friction, damper and inertia conditions.
 
     Roll static forces are ``* roll_scale``; damper and inertia are equal on
-    both axes. ``clamp_friction`` exists only in ``unboosted`` mode.
+    both axes. ``clamp_friction`` exists only in ``unboosted`` mode;
+    ``trim_style`` picks how the trim-lock button acts.
     """
 
     mode: FeelMode
@@ -36,6 +41,7 @@ class Feel(ProfileModel):
     clamp_friction: Unit | None = None
     damper: Unit
     inertia: Unit
+    trim_style: TrimStyle = "tap"
 
     @model_validator(mode="after")
     def _check_friction_rules(self) -> Self:

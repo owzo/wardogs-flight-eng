@@ -1,17 +1,33 @@
 """Profile handoff: ``take_over`` is the only way to carry state over."""
 
 import pytest
+from profile_support import raw_profile
 from synth_support import engine_for, frame, pitch_friction
 
+from wardogs_flight_eng.constants.loader import load_constants
 from wardogs_flight_eng.engine.commands import (
     AllOffCommand,
     Axis,
+    Command,
     PulseCommand,
     SineCommand,
     SpringCommand,
 )
 from wardogs_flight_eng.engine.frame import Button
+from wardogs_flight_eng.engine.profile import Profile
 from wardogs_flight_eng.engine.synth import FlightEngine
+
+
+def hold_engine(name: str) -> FlightEngine:
+    raw = raw_profile(name)
+    raw["feel"]["trim_style"] = "hold"
+    return FlightEngine(Profile.from_document(raw), load_constants())
+
+
+def pitch_spring(cmds: list[Command]) -> SpringCommand:
+    return next(
+        c for c in cmds if isinstance(c, SpringCommand) and c.axis is Axis.PITCH
+    )
 
 
 def test_engine_has_no_public_latch_setter_or_prime() -> None:
@@ -100,3 +116,29 @@ def test_cycling_back_to_a_clamped_engine_starts_it_free() -> None:
     lak.take_over(lb)
     lb.take_over(lak)
     assert pitch_friction(lb.step(0.01, frame())) == 0.02
+
+
+def test_held_trim_lock_across_handoff_is_blocked_until_released() -> None:
+    hold_lak, lb = hold_engine("lakota"), engine_for("littlebird-miniguns")
+    lb.step(0.01, frame(0, 0, 0, 0, Button.TRIM_LOCK))
+    hold_lak.take_over(lb)
+    for _ in range(40):
+        cmds = hold_lak.step(0.01, frame(0, 0, 0, 0, Button.TRIM_LOCK))
+    assert pitch_spring(cmds).coefficient == 0.5  # still stiff: blocked
+    hold_lak.step(0.01, frame())  # released once
+    for _ in range(40):
+        cmds = hold_lak.step(0.01, frame(0, 0, 0, 0, Button.TRIM_LOCK))
+    assert pitch_spring(cmds).coefficient == 0.0  # now it slackens
+
+
+def test_hold_style_unboosted_engine_clamps_only_while_held() -> None:
+    lb = hold_engine("littlebird-miniguns")
+    held = frame(0, 0, 0, 0, Button.TRIM_LOCK)
+    for _ in range(40):
+        cmds = lb.step(0.01, held)
+    assert pitch_friction(cmds) == 0.5
+    cmds = lb.step(0.01, frame(0, 0, 0, 0, Button.TRIM_LOCK, Button.TRIM_RESET))
+    assert pitch_friction(cmds) == 0.5  # reset is a no-op in hold style
+    for _ in range(40):
+        cmds = lb.step(0.01, frame())
+    assert pitch_friction(cmds) == 0.02
