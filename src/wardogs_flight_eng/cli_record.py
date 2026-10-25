@@ -23,7 +23,11 @@ from wardogs_flight_eng.engine.device_map import Calibration, DeviceMap
 from wardogs_flight_eng.inputs.protocol import DeviceLostError
 from wardogs_flight_eng.inputs.sdl_api import SdlError
 from wardogs_flight_eng.inputs.sdl_device import SdlDevice
-from wardogs_flight_eng.runtime.recorder import DeviceSnapshot, ScenarioRecorder
+from wardogs_flight_eng.runtime.recorder import (
+    DeviceSnapshot,
+    ScenarioRecorder,
+    replay_end,
+)
 
 log = logging.getLogger(__name__)
 
@@ -40,6 +44,22 @@ class _Session:
     @property
     def seconds(self) -> float:
         return self.ticks / self.rate_hz
+
+    def finish(self, device_map: DeviceMap) -> dict[str, Any]:
+        return self.recorder.finish(replay_end(self.ticks, self.rate_hz), device_map)
+
+
+def min_change_arg(text: str) -> float:
+    """``--min-change``: a finite number of raw axis units, 0 or more."""
+    try:
+        value = float(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not a number: {text!r}") from None
+    if not 0 <= value < float("inf"):
+        raise argparse.ArgumentTypeError(
+            f"--min-change must be a finite number >= 0: {text}"
+        )
+    return value
 
 
 def _snapshot(devices: dict[str, SdlDevice]) -> dict[str, DeviceSnapshot]:
@@ -76,7 +96,7 @@ def _capture(
 
 def _write(path: Path, document: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(document, indent=2) + "\n"
+    text = json.dumps(document, indent=2, allow_nan=False) + "\n"
     path.write_text(text, encoding="utf-8", newline="\n")
     log.info("scenario written to %s", path)
 
@@ -119,14 +139,14 @@ def record_command(args: argparse.Namespace, ctx: CliContext) -> int:
     try:
         with ctrl_c_requests_stop() as stop:
             _capture(session, devices, stop)
-    except (DeviceLostError, SdlError):
+    except (DeviceLostError, SdlError, KeyboardInterrupt):
         if session.recorder.step_count:
-            _write(out, session.recorder.finish(session.seconds, device_map))
+            _write(out, session.finish(device_map))
             ctx.console.line(f"partial recording ({session.seconds:.2f} s) -> {out}")
         raise
     finally:
         close_devices(devices)
-    _write(out, session.recorder.finish(session.seconds, device_map))
+    _write(out, session.finish(device_map))
     ctx.console.line(
         f"recorded {session.ticks} ticks ({session.seconds:.2f} s), "
         f"{session.recorder.step_count} steps -> {out}"

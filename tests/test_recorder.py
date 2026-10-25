@@ -1,13 +1,18 @@
 """``ScenarioRecorder``: raw device snapshots become a replayable scenario."""
 
 import json
+import math
 from pathlib import Path
 
 from cli_support import BOUND_MAP
 
 from wardogs_flight_eng.engine.device_map import DeviceMap
 from wardogs_flight_eng.inputs.simulated import Scenario
-from wardogs_flight_eng.runtime.recorder import DeviceSnapshot, ScenarioRecorder
+from wardogs_flight_eng.runtime.recorder import (
+    DeviceSnapshot,
+    ScenarioRecorder,
+    replay_end,
+)
 
 DEVICE_MAP = DeviceMap.model_validate(BOUND_MAP)
 
@@ -80,3 +85,38 @@ def test_recorded_document_round_trips_through_scenario_load(tmp_path: Path) -> 
     scenario.apply_until(0.5)
     assert scenario.devices["base"].axes[0] == 0.4
     assert scenario.devices["base"].buttons == [True]
+
+
+def test_a_step_replays_on_its_own_tick_at_120_hz(tmp_path: Path) -> None:
+    r = ScenarioRecorder(120.0, 0.005)
+    r.begin(0.0, {"base": _snap(0.0)})
+    r.observe(2 / 120, {"base": _snap(0.5)})
+    path = tmp_path / "flight.json"
+    path.write_text(json.dumps(r.finish(7 / 120, DEVICE_MAP)), encoding="utf-8")
+    scenario = Scenario.load(path)
+    scenario.apply_until(1 / 120)
+    assert scenario.devices["base"].axes[0] == 0.0
+    scenario.apply_until(2 / 120)
+    assert scenario.devices["base"].axes[0] == 0.5
+    assert int(scenario.duration_s * 120.0) == 7
+
+
+def test_replay_end_multiplies_back_to_exactly_the_tick_count() -> None:
+    assert int((123 / 30) * 30) == 122  # the truncation replay_end guards against
+    for rate in (30.0, 60.0, 100.0, 120.0, 144.0, 300.0):
+        for ticks in range(5000):
+            end = replay_end(ticks, rate)
+            assert int(end * rate) == ticks
+            assert 0.0 <= end - ticks / rate <= math.ulp(end)
+
+
+def test_zero_min_change_records_any_change_but_skips_unchanged_axes() -> None:
+    r = ScenarioRecorder(100.0, 0.0)
+    r.begin(0.0, {"base": _snap(0.0, 0.5)})
+    r.observe(0.01, {"base": _snap(0.001, 0.5)})
+    r.observe(0.02, {"base": _snap(0.001, 0.5)})
+    steps = r.finish(0.03, DEVICE_MAP)["steps"]
+    assert steps[1:] == [
+        {"t": 0.01, "set": {"base.axis0": 0.001}},
+        {"t": 0.03, "set": {}},
+    ]

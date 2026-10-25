@@ -26,7 +26,7 @@ from wardogs_flight_eng.cli_console import (
 from wardogs_flight_eng.cli_devices import check_device_command, list_devices_command
 from wardogs_flight_eng.cli_offline import dry_run_command, show_constants_command
 from wardogs_flight_eng.cli_preset import make_preset_command
-from wardogs_flight_eng.cli_record import record_command
+from wardogs_flight_eng.cli_record import min_change_arg, record_command
 from wardogs_flight_eng.cli_run import run_command
 from wardogs_flight_eng.cockpit_preset import PresetError
 from wardogs_flight_eng.constants.loader import ConstantsError
@@ -132,7 +132,7 @@ def _add_record(sub: "argparse._SubParsersAction[_Parser]", common: _Parser) -> 
     record.add_argument("--rate", type=_positive_rate, default=100.0, help="Hz")
     record.add_argument("--duration", type=float, help="seconds (default: Ctrl+C)")
     record.add_argument(
-        "--min-change", type=float, default=0.005, help="smallest axis move kept"
+        "--min-change", type=min_change_arg, default=0.005, help="smallest move kept"
     )
 
 

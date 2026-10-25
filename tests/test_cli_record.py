@@ -8,6 +8,7 @@ from cli_support import (
     TickingSdl,
     bound_document,
     detach_all,
+    interrupt,
     invoke,
     joysticks_released,
     packaged_document,
@@ -124,3 +125,22 @@ def test_record_refuses_a_profile_without_devices(tmp_path: Path) -> None:
 def test_record_rejects_a_non_positive_duration(profile: Path, tmp_path: Path) -> None:
     result = invoke(_record(profile, tmp_path / "f.json", "--duration", "0"))
     assert result.code == 1 and "--duration" in result.output
+
+
+@pytest.mark.parametrize("value", ["nan", "inf", "-1"])
+def test_record_rejects_a_bad_min_change(
+    profile: Path, tmp_path: Path, value: str
+) -> None:
+    result = invoke(_record(profile, tmp_path / "f.json", "--min-change", value))
+    assert result.code == 1 and "--min-change" in result.output
+    assert not (tmp_path / "f.json").exists()
+
+
+def test_a_forced_interrupt_still_writes_the_partial_file(
+    profile: Path, tmp_path: Path
+) -> None:
+    fake = TickingSdl(stick(), pedals(), after=6, then=lambda _fake: interrupt())
+    out = tmp_path / "f.json"
+    result = invoke(_record(profile, out), api=fake)
+    assert result.code == 1 and Scenario.load(out).duration_s > 0.0
+    assert joysticks_released(fake)
