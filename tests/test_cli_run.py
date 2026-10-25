@@ -45,12 +45,9 @@ def _run(profile: Path, *extra: str) -> list[str]:
 
 
 def _released(fake: FakeSdl) -> None:
-    """Haptic closed first, then both joysticks; nothing touched afterwards.
-
-    Two haptic closes: the capability probe's channel and the backend's.
-    """
+    """Haptic closed first, then both joysticks; nothing touched afterwards."""
     names = fake.names()
-    assert fake.count("SDL_HapticClose") == 2
+    assert fake.count("SDL_HapticClose") == 1
     assert joysticks_released(fake)
     assert names[-2:] == ["SDL_JoystickClose", "SDL_JoystickClose"]
     assert names.index("SDL_HapticClose") < len(names) - 2
@@ -88,13 +85,11 @@ def test_ctrl_c_stops_cleanly_and_tees_the_force_log(
 
 
 class CtrlCWhileOpeningHaptic(TickingSdl):
-    """Ctrl+C arrives just after the backend's haptic opened (the second open;
-    the first is the capability probe, before the handler is installed)."""
+    """Ctrl+C arrives just after the haptic opened, inside the backend build."""
 
     def SDL_HapticOpenFromJoystick(self, joystick: object) -> object | None:
         haptic = super().SDL_HapticOpenFromJoystick(joystick)
-        if self.count("SDL_HapticOpenFromJoystick") == 2:
-            signal.raise_signal(signal.SIGINT)
+        signal.raise_signal(signal.SIGINT)
         return haptic
 
 
@@ -242,13 +237,18 @@ def test_run_refuses_unboosted_profile_without_friction(profile: Path) -> None:
     result = invoke(["run", "--profile", str(profile)], api=fake)
     assert result.code == 1 and "unboosted" in result.output
     assert "friction" in result.output
-    assert fake.count("SDL_HapticClose") >= 1 and joysticks_released(fake)
+    assert fake.count("SDL_HapticOpenFromJoystick") == 1
+    assert fake.count("SDL_HapticClose") == 1 and joysticks_released(fake)
+    assert fake.count("SDL_HapticNewEffect") == 0
+    assert fake.count("SDL_HapticRunEffect") == 0
 
 
 def test_run_refuses_unboosted_profile_when_query_is_zero(profile: Path) -> None:
     fake = TickingSdl(stick(), pedals(), after=200, then=detach_all)
     fake.query_result = 0
-    assert invoke(["run", "--profile", str(profile)], api=fake).code == 1
+    result = invoke(["run", "--profile", str(profile)], api=fake)
+    assert result.code == 1 and "unboosted" in result.output
+    assert fake.count("SDL_HapticRunEffect") == 0
 
 
 def test_run_allows_force_trim_profile_without_friction(tmp_path: Path) -> None:

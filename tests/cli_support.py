@@ -118,9 +118,8 @@ class TickingSdl(FakeSdl):
 
 
 class TeardownSdl(TickingSdl):
-    """A ``TickingSdl`` whose first ``SDL_HapticStopAll`` and second
-    ``SDL_HapticClose`` each run a hook before doing their work. The first
-    close is the capability probe's; the second is the backend's."""
+    """A ``TickingSdl`` whose first ``SDL_HapticStopAll`` and first
+    ``SDL_HapticClose`` each run a hook before doing their work."""
 
     def __init__(
         self,
@@ -133,7 +132,6 @@ class TeardownSdl(TickingSdl):
         super().__init__(*joysticks, after=after, then=then)
         self._on_stop_all = on_stop_all
         self._on_close = on_close
-        self._closes = 0
 
     def SDL_HapticStopAll(self, haptic: object) -> int:
         hook, self._on_stop_all = self._on_stop_all, None
@@ -142,9 +140,9 @@ class TeardownSdl(TickingSdl):
         return super().SDL_HapticStopAll(haptic)
 
     def SDL_HapticClose(self, haptic: object) -> None:
-        self._closes += 1
-        if self._closes == 2 and self._on_close is not None:
-            self._on_close()
+        hook, self._on_close = self._on_close, None
+        if hook is not None:
+            hook()
         super().SDL_HapticClose(haptic)
 
 

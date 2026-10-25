@@ -25,7 +25,6 @@ from wardogs_flight_eng.cli_interrupt import ReleaseWatch, ctrl_c_requests_stop
 from wardogs_flight_eng.cli_profiles import load_checked_profile
 from wardogs_flight_eng.cli_run_checks import (
     haptic_axes,
-    missing_conditions,
     refuse_unboosted_without_friction,
     shared_map,
 )
@@ -69,12 +68,24 @@ def _force_backend(
     profiles: Sequence[Profile],
     watchdog_s: float,
 ) -> ReleaseWatch:
-    """Clamp -> [tee ->] SDL haptic, with the strictest ceiling of the profiles."""
-    output: ForceBackend = SdlHapticBackend(
+    """Clamp -> [tee ->] SDL haptic, with the strictest ceiling of the profiles.
+
+    An unboosted profile on a base without friction is refused here, on the
+    one haptic channel, before any force is commanded; the channel is closed.
+    """
+    haptic = SdlHapticBackend(
         device,
         axis_map=axis_map,
         persistent_length_s=max(MIN_PERSISTENT_LENGTH_S, 2 * watchdog_s),
     )
+    try:
+        refuse_unboosted_without_friction(
+            profiles, haptic.missing_conditions, device.name
+        )
+    except CliError:
+        haptic.close()
+        raise
+    output: ForceBackend = haptic
     if args.log is not None:
         try:
             output = TeeBackend(output, LoggingBackend(args.log))
@@ -160,9 +171,6 @@ def run_command(args: argparse.Namespace, ctx: CliContext) -> int:
                 f"device_map.axes.pitch/roll: device {base!r} "
                 f"({devices[base].name}) has no force feedback"
             )
-        refuse_unboosted_without_friction(
-            profiles, missing_conditions(devices[base]), devices[base].name
-        )
         source = CompositeInput(device_map, devices)
         names = ", ".join(profile.name for profile in profiles)
         ctx.console.line(f"running {names} at {args.rate:g} Hz; Ctrl+C to stop")
