@@ -41,6 +41,7 @@ __all__ = [
     "checked",
     "ff_actuator_check",
     "match_sdl_guid",
+    "open_dinput_instance",
     "open_dinput_joystick",
     "vid_pid_from_sdl_guid",
 ]
@@ -152,19 +153,26 @@ def _prepare(api: DirectInputApi, handle: DiDeviceHandle) -> None:
 
 
 def open_dinput_joystick(api: DirectInputApi, sdl_guid: str) -> DInputJoystick:
-    """Match ``sdl_guid``, open and acquire it; the device is released again
-    if any step after ``CreateDevice`` fails."""
+    """Match ``sdl_guid``, then open and acquire that instance."""
     info = match_sdl_guid(sdl_guid, api.enumerate_devices())
+    return open_dinput_instance(api, info, sdl_guid)
+
+
+def open_dinput_instance(
+    api: DirectInputApi, info: DiDeviceInfo, guid: str
+) -> DInputJoystick:
+    """Open and acquire ``info`` (``guid`` becomes the joystick's ``guid``);
+    the device is released again if any step after ``CreateDevice`` fails."""
     handle = api.open_device(info.instance_guid)
     try:
         _prepare(api, handle)
-        joystick = DInputJoystick(api, handle, info, sdl_guid)
+        joystick = DInputJoystick(api, handle, info, guid)
     except BaseException:
         # Any failure, a ctypes OSError or Ctrl+C included, must not leave the
         # base exclusively acquired; the original exception propagates.
         api.release_device(handle)
         raise
-    log.info("DirectInput %r opened for SDL GUID %s", info.instance_name, sdl_guid)
+    log.info("DirectInput %r opened as %s", info.instance_name, guid)
     return joystick
 
 

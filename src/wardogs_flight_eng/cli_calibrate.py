@@ -4,13 +4,12 @@ import argparse
 from typing import Final
 
 from wardogs_flight_eng.cli_console import EXIT_OK, CliContext, CliError
-from wardogs_flight_eng.cli_devices import close_devices, open_devices
+from wardogs_flight_eng.cli_device_open import OpenedDevice, close_devices, open_devices
 from wardogs_flight_eng.cli_profiles import load_checked_profile, write_calibration
 from wardogs_flight_eng.constants.loader import load_constants
 from wardogs_flight_eng.engine.device_map import AxisBinding, AxisName, DeviceMap
 from wardogs_flight_eng.engine.profile import Calibration
 from wardogs_flight_eng.inputs.protocol import DeviceLostError
-from wardogs_flight_eng.inputs.sdl_device import SdlDevice
 
 READING_DECIMALS: Final = 4
 
@@ -31,7 +30,7 @@ def _binding(device_map: DeviceMap, channel: AxisName) -> AxisBinding:
     return binding
 
 
-def _sample(ctx: CliContext, device: SdlDevice, axis: int, prompt: str) -> float:
+def _sample(ctx: CliContext, device: OpenedDevice, axis: int, prompt: str) -> float:
     """Prompt, wait for Enter, then read the raw (uninverted) axis."""
     ctx.console.line(prompt)
     if ctx.stdin.readline() == "":
@@ -45,7 +44,7 @@ def _sample(ctx: CliContext, device: SdlDevice, axis: int, prompt: str) -> float
 
 
 def _readings(
-    ctx: CliContext, device_map: DeviceMap, devices: dict[str, SdlDevice]
+    ctx: CliContext, device_map: DeviceMap, devices: dict[str, OpenedDevice]
 ) -> dict[str, float]:
     readings: dict[str, float] = {}
     for field, channel, prompt in STEPS:

@@ -16,14 +16,13 @@ from pathlib import Path
 from typing import Any
 
 from wardogs_flight_eng.cli_console import EXIT_OK, CliContext, CliError
-from wardogs_flight_eng.cli_devices import close_devices, open_devices
+from wardogs_flight_eng.cli_device_open import OpenedDevice, close_devices, open_devices
 from wardogs_flight_eng.cli_interrupt import ctrl_c_requests_stop
 from wardogs_flight_eng.cli_profiles import load_checked_profile
 from wardogs_flight_eng.constants.loader import load_constants
 from wardogs_flight_eng.engine.device_map import Calibration, DeviceMap
 from wardogs_flight_eng.inputs.protocol import DeviceLostError
 from wardogs_flight_eng.inputs.sdl_api import SdlError
-from wardogs_flight_eng.inputs.sdl_device import SdlDevice
 from wardogs_flight_eng.runtime.recorder import DeviceSnapshot, ScenarioRecorder
 
 log = logging.getLogger(__name__)
@@ -59,7 +58,7 @@ def min_change_arg(text: str) -> float:
     return value
 
 
-def _snapshot(devices: dict[str, SdlDevice]) -> dict[str, DeviceSnapshot]:
+def _snapshot(devices: dict[str, OpenedDevice]) -> dict[str, DeviceSnapshot]:
     """Poll every device and read its raw axes and buttons."""
     snapshot: dict[str, DeviceSnapshot] = {}
     for alias, device in devices.items():
@@ -74,7 +73,7 @@ def _snapshot(devices: dict[str, SdlDevice]) -> dict[str, DeviceSnapshot]:
 
 
 def _capture(
-    session: _Session, devices: dict[str, SdlDevice], stop: threading.Event
+    session: _Session, devices: dict[str, OpenedDevice], stop: threading.Event
 ) -> None:
     """Record at ``rate_hz`` slots until Ctrl+C or ``max_ticks``."""
     period = 1.0 / session.rate_hz

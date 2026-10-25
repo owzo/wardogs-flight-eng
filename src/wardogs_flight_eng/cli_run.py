@@ -20,10 +20,13 @@ from wardogs_flight_eng.cli_console import (
     CliContext,
     CliError,
 )
-from wardogs_flight_eng.cli_devices import close_devices, open_devices
+from wardogs_flight_eng.cli_device_open import OpenedDevice, close_devices, open_devices
+from wardogs_flight_eng.cli_dinput_devices import dinput_session
 from wardogs_flight_eng.cli_interrupt import ReleaseWatch, ctrl_c_requests_stop
 from wardogs_flight_eng.cli_profiles import load_checked_profile
 from wardogs_flight_eng.cli_run_checks import (
+    check_backend_options,
+    check_force_base,
     haptic_axes,
     refuse_unboosted_without_friction,
     shared_map,
@@ -32,12 +35,13 @@ from wardogs_flight_eng.constants.loader import load_constants
 from wardogs_flight_eng.engine.profile import Profile
 from wardogs_flight_eng.engine.synth import FlightEngine
 from wardogs_flight_eng.inputs.composite import CompositeInput
+from wardogs_flight_eng.inputs.dinput_device import DInputJoystick
 from wardogs_flight_eng.inputs.sdl_device import SdlDevice
+from wardogs_flight_eng.outputs.backend_choice import build_force_backend
 from wardogs_flight_eng.outputs.clamp import ClampedBackend
 from wardogs_flight_eng.outputs.haptic_axes import HapticAxisMap
 from wardogs_flight_eng.outputs.logging_backend import LoggingBackend
 from wardogs_flight_eng.outputs.protocol import ForceBackend
-from wardogs_flight_eng.outputs.sdl_haptic import SdlHapticBackend
 from wardogs_flight_eng.outputs.tee import TeeBackend
 from wardogs_flight_eng.runtime.loop import LoopResult, StopReason, run_loop
 
@@ -63,18 +67,20 @@ class _Outcome:
 
 def _force_backend(
     args: argparse.Namespace,
-    device: SdlDevice,
+    device: OpenedDevice,
     axis_map: HapticAxisMap,
     profiles: Sequence[Profile],
     watchdog_s: float,
 ) -> ReleaseWatch:
-    """Clamp -> [tee ->] SDL haptic, with the strictest ceiling of the profiles.
+    """Clamp -> [tee ->] the --backend's haptic, with the strictest ceiling.
 
     An unboosted profile on a base without friction is refused here, on the
-    one haptic channel, before any force is commanded; the channel is closed.
+    one force channel, before any force is commanded; the channel is closed.
     """
-    haptic = SdlHapticBackend(
-        device,
+    haptic = build_force_backend(
+        args.backend,
+        sdl_device=device if isinstance(device, SdlDevice) else None,
+        dinput_joystick=device if isinstance(device, DInputJoystick) else None,
         axis_map=axis_map,
         persistent_length_s=max(MIN_PERSISTENT_LENGTH_S, 2 * watchdog_s),
         refresh_every_tick=args.refresh_every_tick,
@@ -158,6 +164,7 @@ def _report(ctx: CliContext, outcome: _Outcome) -> int:
 
 
 def run_command(args: argparse.Namespace, ctx: CliContext) -> int:
+    check_backend_options(args.backend, args.refresh_every_tick)
     paths: list[Path] = args.profile
     constants = load_constants()
     profiles = [load_checked_profile(path, constants) for path in paths]
@@ -165,23 +172,25 @@ def run_command(args: argparse.Namespace, ctx: CliContext) -> int:
     base, axis_map = haptic_axes(device_map)
     watchdog_s = min(profile.safety.watchdog_s for profile in profiles)
     engines = [FlightEngine(profile, constants) for profile in profiles]
-    devices = open_devices(device_map, ctx.api)
-    try:
-        if devices[base].api.SDL_JoystickIsHaptic(devices[base].joystick) != 1:
-            raise CliError(
-                f"device_map.axes.pitch/roll: device {base!r} "
-                f"({devices[base].name}) has no force feedback"
-            )
-        source = CompositeInput(device_map, devices)
-        names = ", ".join(profile.name for profile in profiles)
-        ctx.console.line(f"running {names} at {args.rate:g} Hz; Ctrl+C to stop")
-        outcome = _fly(
-            args,
-            engines,
-            source,
-            lambda: _force_backend(args, devices[base], axis_map, profiles, watchdog_s),
-            watchdog_s,
+    with dinput_session(ctx, args.backend) as dinput_api:
+        dinput_base = None if dinput_api is None else base
+        devices = open_devices(
+            device_map, ctx.api, dinput_base=dinput_base, dinput_api=dinput_api
         )
-    finally:
-        close_devices(devices)
+        try:
+            check_force_base(devices[base], base, axis_map)
+            source = CompositeInput(device_map, devices)
+            names = ", ".join(profile.name for profile in profiles)
+            ctx.console.line(f"running {names} at {args.rate:g} Hz; Ctrl+C to stop")
+            outcome = _fly(
+                args,
+                engines,
+                source,
+                lambda: _force_backend(
+                    args, devices[base], axis_map, profiles, watchdog_s
+                ),
+                watchdog_s,
+            )
+        finally:
+            close_devices(devices)
     return _report(ctx, outcome)

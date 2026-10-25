@@ -10,13 +10,14 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Final, Protocol, TextIO
 
+from wardogs_flight_eng.inputs.dinput_api import DirectInputApi
 from wardogs_flight_eng.inputs.sdl_api import SdlApi
 
 EXIT_OK: Final = 0
 EXIT_CONFIG: Final = 1
 """Usage, profile, scenario or configuration error; the message names the field."""
 EXIT_DEVICE: Final = 2
-"""A device is missing, was lost, or SDL failed."""
+"""A device is missing, was lost, or SDL or DirectInput failed."""
 
 
 class CliError(Exception):
@@ -62,8 +63,10 @@ class Console:
 
 @dataclass(frozen=True, slots=True)
 class CliContext:
-    """What a subcommand may touch: console, SDL (``None`` = real) and stdin."""
+    """What a subcommand may touch: console, SDL (``None`` = real), stdin and
+    DirectInput (``None`` = real)."""
 
     console: Console
     api: SdlApi | None
     stdin: LineReader
+    dinput_api: DirectInputApi | None = None

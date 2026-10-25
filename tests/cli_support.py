@@ -13,6 +13,7 @@ from sdl_support import GUID_PEDALS, GUID_STICK, FakeJoystick, FakeSdl
 
 from wardogs_flight_eng.cli import main
 from wardogs_flight_eng.engine.profile import PROFILES_DIR
+from wardogs_flight_eng.inputs.dinput_api import DirectInputApi
 from wardogs_flight_eng.inputs.sdl_api import HapticEffect, SdlApi
 
 PACKAGED = PROFILES_DIR / "littlebird-miniguns.json"
@@ -65,14 +66,17 @@ def invoke(
     argv: list[str],
     api: SdlApi | None = None,
     stdin: "ScriptedStdin | None" = None,
+    dinput_api: DirectInputApi | None = None,
 ) -> CliRun:
-    """Run ``main`` with a captured console; ``api`` defaults to an empty fake."""
+    """Run ``main`` with a captured console; ``api`` defaults to an empty fake,
+    ``dinput_api`` to the real adapter (tests pass a ``FakeDirectInput``)."""
     out = io.StringIO()
     code = main(
         argv,
         console=out,
         api=FakeSdl() if api is None else api,
         stdin=ScriptedStdin() if stdin is None else stdin,
+        dinput_api=dinput_api,
     )
     return CliRun(code, out.getvalue())
 

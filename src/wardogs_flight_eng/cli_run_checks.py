@@ -1,18 +1,31 @@
 """What ``run`` checks before it drives the base.
 
-``shared_map`` and ``haptic_axes`` read the profiles alone, before any device
-is opened. ``refuse_unboosted_without_friction`` is pure as well, but runs
-after the base opens: the caller supplies the condition kinds the base lacks,
-read from the one haptic channel it opens.
+``check_backend_options`` reads the arguments alone, ``shared_map`` and
+``haptic_axes`` the profiles alone, all before any device is opened.
+``check_force_base`` runs once the base is open. ``refuse_unboosted_without_friction``
+is pure as well, but runs after the base opens: the caller supplies the
+condition kinds the base lacks, read from the one force channel it opens.
 """
 
 from collections.abc import Sequence
 from pathlib import Path
 
 from wardogs_flight_eng.cli_console import EXIT_CONFIG, CliError
+from wardogs_flight_eng.cli_dinput_devices import require_backend
 from wardogs_flight_eng.engine.device_map import DeviceMap
 from wardogs_flight_eng.engine.profile import Profile
+from wardogs_flight_eng.inputs.dinput_device import DInputJoystick, ff_actuator_check
+from wardogs_flight_eng.inputs.protocol import InputConfigError, InputDevice
+from wardogs_flight_eng.inputs.sdl_device import SdlDevice
+from wardogs_flight_eng.outputs.backend_choice import BackendKind
 from wardogs_flight_eng.outputs.haptic_axes import HapticAxisMap
+
+
+def check_backend_options(kind: BackendKind, refresh_every_tick: bool) -> None:
+    """``--refresh-every-tick`` is an SDL mode; ``dinput8`` needs Windows."""
+    if refresh_every_tick and kind != "sdl":
+        raise CliError("--refresh-every-tick applies to the sdl backend only")
+    require_backend(kind)
 
 
 def _first_difference(a: object, b: object, where: str) -> str | None:
@@ -87,3 +100,21 @@ def refuse_unboosted_without_friction(
                 "that profile or use a base with friction",
                 EXIT_CONFIG,
             )
+
+
+def check_force_base(device: InputDevice, alias: str, axis_map: HapticAxisMap) -> None:
+    """SDL: the joystick reports haptics; DirectInput: pitch and roll are
+    force-feedback actuator axes."""
+    if isinstance(device, DInputJoystick):
+        try:
+            ff_actuator_check(device, axis_map)
+        except InputConfigError as err:
+            raise CliError(f"device_map.axes.pitch/roll: {err}") from err
+        return
+    if not isinstance(device, SdlDevice):
+        return
+    if device.api.SDL_JoystickIsHaptic(device.joystick) != 1:
+        raise CliError(
+            f"device_map.axes.pitch/roll: device {alias!r} "
+            f"({device.name}) has no force feedback"
+        )

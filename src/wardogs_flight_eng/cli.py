@@ -1,9 +1,10 @@
 """``wardogs-flight-eng``: argument parsing and subcommand dispatch.
 
 Exit codes: 0 ok; 1 usage, profile or configuration error (the message names
-the field or channel); 2 a device is missing or was lost. The subcommands
-live in ``cli_run``, ``cli_devices``, ``cli_calibrate``, ``cli_offline``,
-``cli_preset`` and ``cli_record``; output goes through ``cli_console.Console``.
+the field or channel); 2 a device is missing or was lost. The subcommands live
+in ``cli_run``, ``cli_devices``, ``cli_dinput_devices``, ``cli_calibrate``,
+``cli_offline``, ``cli_preset`` and ``cli_record``; output goes through
+``cli_console.Console``.
 """
 
 import argparse
@@ -13,6 +14,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import NoReturn, TextIO
 
+from wardogs_flight_eng import cli_dinput_devices
 from wardogs_flight_eng.cli_calibrate import calibrate_command
 from wardogs_flight_eng.cli_console import (
     EXIT_CONFIG,
@@ -23,7 +25,6 @@ from wardogs_flight_eng.cli_console import (
     Console,
     LineReader,
 )
-from wardogs_flight_eng.cli_devices import check_device_command, list_devices_command
 from wardogs_flight_eng.cli_offline import dry_run_command, show_constants_command
 from wardogs_flight_eng.cli_preset import make_preset_command
 from wardogs_flight_eng.cli_record import min_change_arg, record_command
@@ -31,6 +32,7 @@ from wardogs_flight_eng.cli_run import run_command
 from wardogs_flight_eng.cockpit_preset import PresetError
 from wardogs_flight_eng.constants.loader import ConstantsError
 from wardogs_flight_eng.engine.profile import ProfileError
+from wardogs_flight_eng.inputs.dinput_api import DInputError, DirectInputApi
 from wardogs_flight_eng.inputs.protocol import DeviceLostError, InputConfigError
 from wardogs_flight_eng.inputs.sdl_api import SdlApi, SdlError
 from wardogs_flight_eng.runtime.paths import setup_logging
@@ -44,8 +46,8 @@ Command = Callable[[argparse.Namespace, CliContext], int]
 COMMANDS: dict[str, Command] = {
     "run": run_command,
     "dry-run": dry_run_command,
-    "list-devices": list_devices_command,
-    "check-device": check_device_command,
+    "list-devices": cli_dinput_devices.list_devices_by_backend,
+    "check-device": cli_dinput_devices.check_device_by_backend,
     "calibrate": calibrate_command,
     "show-constants": show_constants_command,
     "make-preset": make_preset_command,
@@ -53,7 +55,7 @@ COMMANDS: dict[str, Command] = {
 }
 
 _CONFIG_ERRORS = (ProfileError, ConstantsError, InputConfigError, PresetError, OSError)
-_DEVICE_ERRORS = (SdlError, DeviceLostError)
+_DEVICE_ERRORS = (SdlError, DInputError, DeviceLostError)
 
 
 class _Parser(argparse.ArgumentParser):
@@ -75,6 +77,7 @@ def _positive_rate(text: str) -> float:
 
 def _add_run(sub: "argparse._SubParsersAction[_Parser]", common: _Parser) -> None:
     run = sub.add_parser("run", parents=[common], help="drive the force base")
+    cli_dinput_devices.add_backend_argument(run)
     run.add_argument(
         "--profile",
         type=Path,
@@ -98,7 +101,9 @@ def _add_tools(sub: "argparse._SubParsersAction[_Parser]", common: _Parser) -> N
     dry.add_argument("--out", type=Path, help="output directory")
     listing = sub.add_parser("list-devices", parents=[common], help="show joysticks")
     listing.add_argument("--live", action="store_true", help="show live values")
+    cli_dinput_devices.add_backend_argument(listing)
     check = sub.add_parser("check-device", parents=[common], help="probe the base")
+    cli_dinput_devices.add_backend_argument(check)
     check.add_argument("--guid", help="device GUID (default: first with haptics)")
     calibrate = sub.add_parser("calibrate", parents=[common], help="record ranges")
     calibrate.add_argument("--profile", type=Path, required=True)
@@ -171,12 +176,13 @@ def main(
     console: TextIO | None = None,
     api: SdlApi | None = None,
     stdin: LineReader | None = None,
+    dinput_api: DirectInputApi | None = None,
 ) -> int:
     """Parse ``argv`` (default ``sys.argv[1:]``), run it, return the exit code.
 
     ``console`` is the stream user output goes to (default stdout), ``api``
-    the SDL implementation (default the real one) and ``stdin`` where
-    ``calibrate`` reads Enter presses (default ``sys.stdin``).
+    and ``dinput_api`` the SDL and DirectInput implementations (default the
+    real ones) and ``stdin`` where ``calibrate`` reads Enter presses.
     """
     out = Console(console)
     try:
@@ -187,5 +193,5 @@ def main(
     except SystemExit as done:  # --help printed its text
         return done.code if isinstance(done.code, int) else EXIT_OK
     setup_logging(args.verbose)
-    ctx = CliContext(out, api, sys.stdin if stdin is None else stdin)
+    ctx = CliContext(out, api, sys.stdin if stdin is None else stdin, dinput_api)
     return _dispatch(args, ctx)
