@@ -318,7 +318,9 @@ Five effects, per airframe, all set in the profile JSON:
 4. **Rotor buzz.** A sine at the airframe's main-rotor frequency on both axes,
    scaled by the collective position, a little by cyclic deflection and by
    the airspeed estimate (`1 + rotor.airspeed_factor * airspeed`), with a
-   spool-up when the program starts.
+   spool-up when the program starts. `rotor.min_amplitude` (optional, `0..1`,
+   default `0`) is a floor for bases that cannot render a very weak sine: a
+   buzz strictly below it is sent as zero, one at or above it plays as is.
 5. **Weapon recoil.** While `fire` is held, after the weapon's wind-up, one
    force pulse per round at the weapon's fire rate, stepping through the game's
    recoil pattern (or a fixed rearward kick for rockets), plus the weapon's
@@ -518,7 +520,8 @@ code task.
    effect length (about twice a second), because on Windows every update or
    run restarts a playing effect. `SdlHapticBackend(...,
    refresh_every_tick=True)` restores the earlier behaviour: update and re-run
-   all four persistent effects every tick. Run the conformance test once
+   all four persistent effects every tick; from the command line that is
+   `run --refresh-every-tick`. Run the conformance test once
    as above and once with `WFE_REFRESH_EVERY_TICK=1` added, and compare the
    spring hold and the logged sine range: the buzz should be smooth in both,
    and if only the per-tick mode feels right, report it in an issue.

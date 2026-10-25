@@ -79,6 +79,11 @@ def _add_run(sub: "argparse._SubParsersAction[_Parser]", common: _Parser) -> Non
     )
     run.add_argument("--rate", type=_positive_rate, default=200.0, help="loop Hz")
     run.add_argument("--log", type=Path, help="also write every command as JSONL")
+    run.add_argument(
+        "--refresh-every-tick",
+        action="store_true",
+        help="update and re-run every persistent effect each tick (A/B aid)",
+    )
 
 
 def _add_tools(sub: "argparse._SubParsersAction[_Parser]", common: _Parser) -> None:

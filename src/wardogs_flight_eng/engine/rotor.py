@@ -24,11 +24,14 @@ class RotorModel:
         base_amplitude: float,
         deflection_factor: float,
         airspeed_factor: float = 0.0,
+        min_amplitude: float = 0.0,
     ) -> None:
         """Create a rotor that is running and at rest (0 RPM).
 
         ``spool_up_s`` is the time to go from 0 to ``operating_rpm``; ``0``
-        reaches operating RPM on the next ``step``.
+        reaches operating RPM on the next ``step``. A buzz amplitude strictly
+        below ``min_amplitude`` (``0..1``) is emitted as ``0.0``: the base
+        cannot render a weaker sine, so it would only hum.
         """
         if operating_rpm <= 0:
             raise ValueError(f"operating_rpm must be > 0, got {operating_rpm}")
@@ -41,12 +44,15 @@ class RotorModel:
         ):
             if value < 0:
                 raise ValueError(f"{name} must be >= 0, got {value}")
+        if not 0.0 <= min_amplitude <= 1.0:
+            raise ValueError(f"min_amplitude must be in 0..1, got {min_amplitude}")
         self._operating_rpm = operating_rpm
         self._spool_up_s = spool_up_s
         self._spool_down_rpm_per_s = spool_down_rpm_per_s
         self._base_amplitude = base_amplitude
         self._deflection_factor = deflection_factor
         self._airspeed_factor = airspeed_factor
+        self._min_amplitude = min_amplitude
         self.running = True
         self.rpm = 0.0
 
@@ -83,7 +89,7 @@ class RotorModel:
     def amplitude(
         self, collective: float, deflection: float, airspeed: float = 0.0
     ) -> float:
-        """Buzz amplitude clamped to ``0..1``.
+        """Buzz amplitude clamped to ``0..1``, or ``0.0`` below the floor.
 
         ``collective`` is the normalised collective ``0..1`` and
         ``deflection`` the cyclic's distance from the trim centre ``0..1``.
@@ -96,7 +102,8 @@ class RotorModel:
             * (1.0 + self._deflection_factor * deflection)
             * (1.0 + self._airspeed_factor * airspeed)
         )
-        return max(0.0, min(1.0, raw))
+        clamped = max(0.0, min(1.0, raw))
+        return clamped if clamped >= self._min_amplitude else 0.0
 
     def _spool_up(self, dt: float) -> float:
         """RPM after ``dt`` seconds of spooling up, capped at operating RPM."""

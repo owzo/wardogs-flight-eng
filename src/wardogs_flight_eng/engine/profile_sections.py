@@ -68,6 +68,8 @@ class Rotor(ProfileModel):
     """Rotor buzz. ``None`` spool-down falls back to the airframe's constant.
 
     ``airspeed_factor`` scales the amplitude by ``1 + factor * airspeed``.
+    ``min_amplitude`` is the buzz floor: a magnitude strictly below it is
+    emitted as 0.0, at or above it plays unchanged.
     """
 
     base_amplitude: Unit
@@ -75,6 +77,7 @@ class Rotor(ProfileModel):
     spool_up_s: NonNegative
     spool_down_rpm_per_s: Positive | None
     airspeed_factor: NonNegative
+    min_amplitude: Unit = 0.0
 
 
 class Recoil(ProfileModel):

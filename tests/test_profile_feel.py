@@ -108,3 +108,7 @@ def test_estimator_threshold_below_one() -> None:
     raw["estimator"]["forward_threshold"] = 1.0
     with pytest.raises(ProfileError, match="forward_threshold"):
         Profile.from_document(raw)
+
+
+def test_min_amplitude_defaults_to_zero_in_shipped_profiles() -> None:
+    assert load_profile(PROFILES / "havoc.json").rotor.min_amplitude == 0.0

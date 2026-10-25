@@ -77,6 +77,7 @@ def _force_backend(
         device,
         axis_map=axis_map,
         persistent_length_s=max(MIN_PERSISTENT_LENGTH_S, 2 * watchdog_s),
+        refresh_every_tick=args.refresh_every_tick,
     )
     try:
         refuse_unboosted_without_friction(

@@ -120,3 +120,21 @@ def test_take_over_copies_spool_fraction_into_this_rotor_speed() -> None:
 def test_rejects_negative_airspeed_factor() -> None:
     with pytest.raises(ValueError, match="airspeed_factor"):
         RotorModel(300, 0, 850, 0.3, 0.5, airspeed_factor=-0.1)
+
+
+def test_buzz_below_the_floor_is_silenced() -> None:
+    r = RotorModel(300, 0, 850, 0.4, 0.0, min_amplitude=0.1)
+    r.step(0.01)
+    assert r.amplitude(0.2, 0.0) == 0.0  # 0.08 < 0.1
+
+
+def test_buzz_at_the_floor_plays() -> None:
+    r = RotorModel(300, 0, 850, 0.4, 0.0, min_amplitude=0.1)
+    r.step(0.01)
+    assert r.amplitude(0.25, 0.0) == pytest.approx(0.1)
+
+
+@pytest.mark.parametrize("floor", [-0.1, 1.1])
+def test_min_amplitude_outside_unit_range_is_rejected(floor: float) -> None:
+    with pytest.raises(ValueError, match="min_amplitude"):
+        RotorModel(300, 0, 850, 0.4, 0.0, min_amplitude=floor)

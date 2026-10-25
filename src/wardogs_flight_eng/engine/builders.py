@@ -30,6 +30,7 @@ def build_rotor(profile: Profile, airframe: Airframe) -> RotorModel:
         base_amplitude=profile.rotor.base_amplitude,
         deflection_factor=profile.rotor.deflection_factor,
         airspeed_factor=profile.rotor.airspeed_factor,
+        min_amplitude=profile.rotor.min_amplitude,
     )
 
 
