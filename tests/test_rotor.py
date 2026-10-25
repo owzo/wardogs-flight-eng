@@ -100,10 +100,11 @@ def test_amplitude_grows_with_airspeed_factor() -> None:
 
 def test_airspeed_factor_is_clamped_to_unit_range() -> None:
     r = RotorModel(
-        300, 0, 850, base_amplitude=0.6, deflection_factor=1.0, airspeed_factor=2.0
+        300, 0, 850, base_amplitude=0.4, deflection_factor=0.0, airspeed_factor=2.0
     )
     r.step(0.01)
-    assert r.amplitude(1.0, 1.0, airspeed=1.0) == 1.0
+    assert r.amplitude(1.0, 1.0, airspeed=1.0) == 1.0  # raw 1.2: the airspeed term
+    assert r.amplitude(1.0, 1.0) == pytest.approx(0.4)
 
 
 def test_take_over_copies_spool_fraction_into_this_rotor_speed() -> None:
