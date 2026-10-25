@@ -2,7 +2,8 @@
 
 Exit codes: 0 ok; 1 usage, profile or configuration error (the message names
 the field or channel); 2 a device is missing or was lost. The subcommands
-live in ``cli_run``, ``cli_devices``, ``cli_calibrate`` and ``cli_offline``;
+live in ``cli_run``, ``cli_devices``, ``cli_calibrate``, ``cli_offline`` and
+``cli_preset``;
 output goes through ``cli_console.Console``.
 """
 
@@ -25,7 +26,9 @@ from wardogs_flight_eng.cli_console import (
 )
 from wardogs_flight_eng.cli_devices import check_device_command, list_devices_command
 from wardogs_flight_eng.cli_offline import dry_run_command, show_constants_command
+from wardogs_flight_eng.cli_preset import make_preset_command
 from wardogs_flight_eng.cli_run import run_command
+from wardogs_flight_eng.cockpit_preset import PresetError
 from wardogs_flight_eng.constants.loader import ConstantsError
 from wardogs_flight_eng.engine.profile import ProfileError
 from wardogs_flight_eng.inputs.protocol import DeviceLostError, InputConfigError
@@ -45,9 +48,10 @@ COMMANDS: dict[str, Command] = {
     "check-device": check_device_command,
     "calibrate": calibrate_command,
     "show-constants": show_constants_command,
+    "make-preset": make_preset_command,
 }
 
-_CONFIG_ERRORS = (ProfileError, ConstantsError, InputConfigError, OSError)
+_CONFIG_ERRORS = (ProfileError, ConstantsError, InputConfigError, PresetError, OSError)
 _DEVICE_ERRORS = (SdlError, DeviceLostError)
 
 
@@ -100,6 +104,26 @@ def _add_tools(sub: "argparse._SubParsersAction[_Parser]", common: _Parser) -> N
     sub.add_parser("show-constants", parents=[common], help="print game constants")
 
 
+def _add_preset(sub: "argparse._SubParsersAction[_Parser]", common: _Parser) -> None:
+    preset = sub.add_parser(
+        "make-preset", parents=[common], help="write a Moza Cockpit preset"
+    )
+    preset.add_argument("--profile", type=Path, required=True)
+    preset.add_argument(
+        "--template", type=Path, required=True, help="your Moza Cockpit export"
+    )
+    preset.add_argument(
+        "--division",
+        choices=["A", "B"],
+        required=True,
+        help="A: Flight Eng owns spring and trim; B: Cockpit does",
+    )
+    preset.add_argument("--out", type=Path, required=True, help="new .preset file")
+    preset.add_argument(
+        "--name", help="preset name (default: template name + division)"
+    )
+
+
 def build_parser() -> _Parser:
     common = _Parser(add_help=False)
     common.add_argument("--verbose", action="store_true", help="debug logging")
@@ -107,6 +131,7 @@ def build_parser() -> _Parser:
     sub = parser.add_subparsers(dest="command", required=True, parser_class=_Parser)
     _add_run(sub, common)
     _add_tools(sub, common)
+    _add_preset(sub, common)
     return parser
 
 

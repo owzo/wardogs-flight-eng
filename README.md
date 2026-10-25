@@ -299,6 +299,28 @@ Under **B**,
 quarter of the spring), and Flight Eng supplies buzz, recoil, damper and
 inertia, plus the clamp's friction in an `unboosted` profile.
 
+`make-preset` writes the Cockpit side for you from your own Cockpit export:
+
+```
+wardogs-flight-eng make-preset --profile <profile.json> --template <your-export.preset>
+                               --division A|B --out <new.preset> [--name <text>]
+```
+
+Export your current base settings from Moza Cockpit as the template; every
+key in it is kept in order and only the keys below change. **A** writes
+`bacic_spring`, `bacic_damper`, `bacic_friction`, `bacic_inertia` and
+`bacic_start_force_enble` 0, `hardware_balancing_enable` 0 and
+`bacic_gameForceFeedback` 100, for a profile in either feel mode. **B** writes
+`bacic_damper`, `bacic_friction` and `bacic_inertia` 0,
+`hardware_balancing_enable` 1 and `bacic_gameForceFeedback` 100, and leaves
+your `bacic_spring` and trim buttons as they are; it needs a `force_trim`
+profile with `feel.spring_coefficient` 0, and refuses a template whose
+`hardware_balancing_trim` or `hardware_balancing_recenter` is 0 or missing
+(bind both buttons in Cockpit and export again, or B has no working trim). The
+new preset gets the `--name` you give (default `<template name> + Flight Eng
+<division>`), a new uuid and the current date. The command prints every key it
+changed with its old and new value, then the path it wrote.
+
 ## What the forces are and where the numbers come from
 
 Five effects, per airframe, all set in the profile JSON:

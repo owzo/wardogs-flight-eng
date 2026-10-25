@@ -1,0 +1,21 @@
+{
+    "date": "1700000000",
+    "device_params": {
+        "bacic_damper": 10,
+        "bacic_friction": 5,
+        "bacic_gameForceFeedback": 80,
+        "bacic_inertia": 20,
+        "bacic_overall_strength": 70,
+        "bacic_spring": 40,
+        "bacic_start_force_enble": 1,
+        "hardware_balancing_enable": 1,
+        "hardware_balancing_recenter": 0,
+        "hardware_balancing_trim": 0,
+        "synthetic_unrelated_one": 7,
+        "synthetic_unrelated_two": 900
+    },
+    "name": "Synthetic",
+    "telemetry_params": {},
+    "uuid": "{00000000-0000-4000-8000-000000000000}",
+    "version": "1.0.4"
+}
