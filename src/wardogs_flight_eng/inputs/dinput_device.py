@@ -4,8 +4,10 @@ SDL opens every DirectInput joystick exclusively, so under ``--backend
 dinput8`` the base is read and driven through this single device object.
 ``open_dinput_joystick`` matches the SDL GUID, then sets exclusive background
 cooperation, auto-centre off and full gain, acquires, resets and switches the
-actuators on. Axis ``i`` is the ``i``-th axis object in ``dwOfs`` order, the
-order SDL's DirectInput driver numbers them.
+actuators on. Axis ``i`` is the ``i``-th readable axis object in ``dwOfs``
+order, the order SDL's DirectInput driver numbers them; objects outside the
+eight ``DIJOYSTATE2`` axis slots (velocity, acceleration, force axes) are
+dropped, as SDL drops them.
 """
 
 import logging
@@ -61,16 +63,21 @@ def checked(status: int, call: str) -> int:
     raise DInputError(f"DirectInput {call} failed: {code:#010x}")
 
 
-def _state_slot(axis: DiAxisInfo) -> int | None:
-    """Where ``axis`` sits in ``DiState.axes``, or None when it is not there."""
-    if axis.offset in DIJOFS_BY_INDEX:
-        return DIJOFS_BY_INDEX.index(axis.offset)
-    return None
+def _split_axes(
+    axes: list[DiAxisInfo],
+) -> tuple[list[DiAxisInfo], list[DiAxisInfo]]:
+    """Axis objects sorted by offset: (readable from ``DiState``, the rest)."""
+    ordered = sorted(axes, key=lambda axis: axis.offset)
+    readable = [axis for axis in ordered if axis.offset in DIJOFS_BY_INDEX]
+    unreadable = [axis for axis in ordered if axis.offset not in DIJOFS_BY_INDEX]
+    return readable, unreadable
 
 
 class DInputJoystick(InputDevice):
     """An acquired DirectInput device; ``api`` and ``handle`` serve the force side.
 
+    ``axes_info`` holds the readable axis objects (``axis`` is total over
+    them); ``unreadable_axes`` the dropped ones, for diagnostics only.
     The constructor polls once to learn ``button_count``. ``poll`` turns the
     lost codes into ``alive = False`` plus ``DeviceLostError``; after
     ``close`` reads return 0.0 / False and the device is never touched again.
@@ -87,8 +94,8 @@ class DInputJoystick(InputDevice):
         self.handle = handle
         self.name = info.instance_name
         self.guid = sdl_guid
-        self.axes_info = sorted(api.axes(handle), key=lambda a: a.offset)
-        self._slots = [_state_slot(axis) for axis in self.axes_info]
+        self.axes_info, self.unreadable_axes = _split_axes(api.axes(handle))
+        self._slots = [DIJOFS_BY_INDEX.index(a.offset) for a in self.axes_info]
         self.axis_count = len(self.axes_info)
         self.alive = True
         self._closed = False
@@ -108,14 +115,7 @@ class DInputJoystick(InputDevice):
     def axis(self, index: int) -> float:
         if self._closed:
             return 0.0
-        slot = self._slots[index]
-        if slot is None:
-            info = self.axes_info[index]
-            raise InputConfigError(
-                f"axis {index} ({info.name}, offset {info.offset}) is not in "
-                f"the joystick state; bind one of the first eight axes"
-            )
-        raw = self._state.axes[slot] / RAW_HALF_SCALE - 1.0
+        raw = self._state.axes[self._slots[index]] / RAW_HALF_SCALE - 1.0
         return max(-1.0, min(1.0, raw))
 
     def button(self, index: int) -> bool:
@@ -159,7 +159,9 @@ def open_dinput_joystick(api: DirectInputApi, sdl_guid: str) -> DInputJoystick:
     try:
         _prepare(api, handle)
         joystick = DInputJoystick(api, handle, info, sdl_guid)
-    except (DInputError, DeviceLostError):
+    except BaseException:
+        # Any failure, a ctypes OSError or Ctrl+C included, must not leave the
+        # base exclusively acquired; the original exception propagates.
         api.release_device(handle)
         raise
     log.info("DirectInput %r opened for SDL GUID %s", info.instance_name, sdl_guid)

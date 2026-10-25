@@ -46,7 +46,9 @@ def match_sdl_guid(sdl_guid: str, infos: Sequence[DiDeviceInfo]) -> DiDeviceInfo
             f"no DirectInput game controller {vid:04x}:{pid:04x} "
             f"(SDL GUID {sdl_guid}) is attached"
         )
-    names = ", ".join(repr(info.instance_name) for info in candidates)
+    names = ", ".join(
+        f"{info.instance_name!r} {info.instance_guid}" for info in candidates
+    )
     raise InputConfigError(
         f"{len(candidates)} DirectInput instances match {vid:04x}:{pid:04x} "
         f"(SDL GUID {sdl_guid}): {names}; attach only one"
