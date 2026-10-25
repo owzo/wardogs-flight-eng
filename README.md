@@ -30,6 +30,8 @@ base. It is MIT licensed, Windows only, and Python 3.12+.
 
 Version 0.2.0.
 
+![CI](https://github.com/owzo/wardogs-flight-eng/actions/workflows/ci.yml/badge.svg)
+
 - **Complete and tested:** the whole engine and the no-hardware path,
   including the two feel modes, the friction, damper and inertia conditions
   and the airspeed estimate (see "Feel modes"). Scripted scenarios drive
@@ -544,6 +546,14 @@ code task.
    lower `feel.friction` or raise `feel.spring_coefficient`. If it
    overshoots or oscillates, raise `feel.damper`.
 8. Commit the tuned profiles.
+
+## Releasing
+
+Tag the release commit `vX.Y.Z` and push the tag. The `build-exe` workflow
+runs on a Windows runner, builds `wardogs-flight-eng.exe` with PyInstaller and
+uploads it with a `SHA256SUMS` file as the `wardogs-flight-eng-vX.Y.Z`
+artifact. Download that artifact from the workflow run, then attach the exe
+and `SHA256SUMS` to the GitHub release.
 
 ## Licence
 

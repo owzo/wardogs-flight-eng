@@ -1,0 +1,33 @@
+name: build-exe
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build-exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Sync dependencies
+        run: uv sync --all-groups
+      - name: Build the executable
+        run: uv run pyinstaller packaging/wardogs-flight-eng.spec
+      - name: Write SHA256SUMS
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash dist/wardogs-flight-eng.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  wardogs-flight-eng.exe" | Out-File dist/SHA256SUMS -Encoding ascii
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wardogs-flight-eng-${{ github.ref_name }}
+          path: |
+            dist/wardogs-flight-eng.exe
+            dist/SHA256SUMS
+          if-no-files-found: error
