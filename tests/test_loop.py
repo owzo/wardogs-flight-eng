@@ -1,81 +1,23 @@
 """Runtime loop: fixed ticks, teardown on every exit path, watchdog, profiles."""
 
-import logging
-from typing import Any
-
 import pytest
 from backends_support import RecordingBackend
 from loop_support import (
-    ALL_OFF_IDX,
-    PROFILE_CYCLE_IDX,
     ButtonScript,
     Devices,
-    FailingAllOffBackend,
-    FailingApplyBackend,
     StepClock,
     TickClock,
-    make_devices,
-    make_engine,
-    make_source,
+    run,
 )
 
 from wardogs_flight_eng.constants.loader import load_constants
 from wardogs_flight_eng.engine.commands import (
     AllOffCommand,
-    Command,
-    SineCommand,
-    SpringCommand,
 )
-from wardogs_flight_eng.engine.frame import Button, ControlFrame
 from wardogs_flight_eng.engine.profile import PROFILES_DIR, load_profile
 from wardogs_flight_eng.engine.synth import FlightEngine
 from wardogs_flight_eng.inputs.composite import CompositeInput
-from wardogs_flight_eng.runtime.loop import LoopResult, run_loop
-
-
-@pytest.fixture
-def fake_clock() -> TickClock:
-    return TickClock(0.005)  # two reads per tick -> dt 0.01 s at 100 Hz
-
-
-@pytest.fixture
-def engine() -> list[FlightEngine]:
-    """A single-profile engine list, the common case for ``run_loop``."""
-    return [make_engine("littlebird-miniguns")]
-
-
-@pytest.fixture
-def engine_lb() -> FlightEngine:
-    return make_engine("littlebird-miniguns")
-
-
-@pytest.fixture
-def engine_lakota() -> FlightEngine:
-    return make_engine("lakota")
-
-
-@pytest.fixture
-def devices() -> Devices:
-    return make_devices()
-
-
-@pytest.fixture
-def source(devices: Devices) -> CompositeInput:
-    return make_source(devices)
-
-
-@pytest.fixture
-def backend() -> RecordingBackend:
-    return RecordingBackend()
-
-
-def run(
-    engines: list[FlightEngine], source: Any, backend: RecordingBackend, **kw: Any
-) -> LoopResult:
-    """``run_loop`` at 100 Hz, 0.25 s watchdog, fake clock, no real sleeping."""
-    options: dict[str, Any] = {"clock": TickClock(0.005), "sleep": lambda s: None}
-    options.update(kw)
-    return run_loop(engines, source, backend, rate_hz=100, watchdog_s=0.25, **options)
+from wardogs_flight_eng.runtime.loop import run_loop
 
 
 # --- the brief's tests -------------------------------------------------------
@@ -128,196 +70,6 @@ def test_stalled_tick_applies_all_off(  # Review Focus 5
     r = run(engine, source, backend, clock=clock, max_ticks=3)
     assert r.ticks == 3
     assert AllOffCommand() in backend.applied[1] and "watchdog" in caplog.text.lower()
-
-
-def test_profile_cycle_switches_engine_and_zeroes_forces(
-    engine_lb: FlightEngine,
-    engine_lakota: FlightEngine,
-    source: CompositeInput,
-    backend: RecordingBackend,
-    devices: Devices,
-    fake_clock: TickClock,
-) -> None:
-    devices["grip"].buttons[PROFILE_CYCLE_IDX] = True
-    r = run_loop(
-        [engine_lb, engine_lakota],
-        source,
-        backend,
-        rate_hz=100,
-        watchdog_s=0.25,
-        clock=fake_clock,
-        sleep=lambda s: None,
-        max_ticks=2,
-    )
-    assert r.active_profile == "lakota" and backend.all_off_calls >= 1
-
-
-# --- beyond the brief: latch carry-over across a profile switch ---------------
-def test_profile_cycle_carries_the_all_off_latch(
-    engine_lb: FlightEngine,
-    engine_lakota: FlightEngine,
-    source: CompositeInput,
-    backend: RecordingBackend,
-    devices: Devices,
-) -> None:
-    script = ButtonScript(devices, [{ALL_OFF_IDX}, set(), {PROFILE_CYCLE_IDX}, set()])
-    r = run([engine_lb, engine_lakota], source, backend, sleep=script, max_ticks=4)
-    assert r.active_profile == "lakota" and engine_lakota.all_off is True
-    assert backend.applied[2:] == [[AllOffCommand()], [AllOffCommand()]]
-
-
-def test_profile_cycle_with_all_off_still_held_keeps_forces_off(
-    engine_lb: FlightEngine,
-    engine_lakota: FlightEngine,
-    source: CompositeInput,
-    backend: RecordingBackend,
-    devices: Devices,
-) -> None:
-    both = {ALL_OFF_IDX, PROFILE_CYCLE_IDX}
-    script = ButtonScript(devices, [{ALL_OFF_IDX}, both, both, {ALL_OFF_IDX}])
-    r = run([engine_lb, engine_lakota], source, backend, sleep=script, max_ticks=4)
-    assert r.active_profile == "lakota" and engine_lakota.all_off is True
-    assert backend.applied[1:] == [[AllOffCommand()]] * 3
-
-
-def test_profile_cycle_wraps_and_logs_the_new_profile(
-    engine_lb: FlightEngine,
-    engine_lakota: FlightEngine,
-    source: CompositeInput,
-    backend: RecordingBackend,
-    devices: Devices,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    caplog.set_level(logging.INFO)
-    cycle = {PROFILE_CYCLE_IDX}
-    script = ButtonScript(devices, [cycle, set(), cycle, set()])
-    r = run([engine_lb, engine_lakota], source, backend, sleep=script, max_ticks=4)
-    assert r.active_profile == "littlebird-miniguns" and backend.all_off_calls == 3
-    assert "lakota" in caplog.text and "littlebird-miniguns" in caplog.text
-
-
-def test_profile_cycle_zeroes_forces_before_the_incoming_engine_applies(
-    engine_lb: FlightEngine,
-    engine_lakota: FlightEngine,
-    source: CompositeInput,
-    backend: RecordingBackend,
-    devices: Devices,
-) -> None:
-    script = ButtonScript(devices, [set(), {PROFILE_CYCLE_IDX}, set()])
-    r = run([engine_lb, engine_lakota], source, backend, sleep=script, max_ticks=3)
-    assert r.active_profile == "lakota"
-    assert backend.events == ["apply", "all_off", "apply", "apply", "all_off", "close"]
-    # take_over carries the spool: one 0.01 s Littlebird tick of the 3 s spool-up,
-    # then one Lakota tick, at the Lakota's 250 rpm (the Littlebird's is 330.4).
-    lakota_hz = 2 * 0.01 / 3.0 * 250 / 60
-    assert _sine_hz(backend.applied[1]) == pytest.approx([lakota_hz] * 2)
-
-
-def test_profile_cycle_hands_over_through_take_over(
-    engine_lakota: FlightEngine,
-    source: CompositeInput,
-    backend: RecordingBackend,
-    devices: Devices,
-) -> None:
-    havoc = make_engine("havoc")
-    for e in (engine_lakota, havoc):  # both anchors locked at (0.5, 0.5)
-        e.step(0.01, ControlFrame(0.5, 0.5, 0, 0, frozenset({Button.TRIM_LOCK})))
-        for _ in range(50):
-            e.step(0.01, ControlFrame(0.5, 0.5, 0, 0, frozenset()))
-    cycle = {PROFILE_CYCLE_IDX}
-    script = ButtonScript(devices, [set(), cycle, {ALL_OFF_IDX}, cycle, set()])
-    r = run([engine_lakota, havoc], source, backend, sleep=script, max_ticks=5)
-    centers = [c.center for c in backend.applied[1] if isinstance(c, SpringCommand)]
-    assert centers == [0.0, 0.0]  # havoc's locked anchor was dropped
-    assert r.active_profile == "lakota" and engine_lakota.all_off is True
-    assert backend.applied[3:] == [[AllOffCommand()], [AllOffCommand()]]
-
-
-def test_profile_cycle_with_one_profile_keeps_the_trim_and_forces(
-    engine_lakota: FlightEngine,
-    source: CompositeInput,
-    backend: RecordingBackend,
-    devices: Devices,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    caplog.set_level(logging.INFO)
-    engine_lakota.step(
-        0.01, ControlFrame(0.5, 0.5, 0, 0, frozenset({Button.TRIM_LOCK}))
-    )
-    for _ in range(50):  # the anchor slews fully to (0.5, 0.5)
-        engine_lakota.step(0.01, ControlFrame(0.5, 0.5, 0, 0, frozenset()))
-    script = ButtonScript(devices, [set(), {PROFILE_CYCLE_IDX}, set()])
-    r = run([engine_lakota], source, backend, sleep=script, max_ticks=3)
-    centers = [
-        [c.center for c in tick if isinstance(c, SpringCommand)]
-        for tick in backend.applied
-    ]
-    assert centers[0] and all(c != 0.0 for c in centers[0])
-    assert centers == [centers[0]] * 3
-    assert r.active_profile == "lakota"
-    assert backend.events == ["apply", "apply", "apply", "all_off", "close"]
-    assert "only one profile loaded" in caplog.text
-
-
-def _sine_hz(commands: list[Command]) -> list[float]:
-    return [c.frequency_hz for c in commands if isinstance(c, SineCommand)]
-
-
-# --- beyond the brief: every exit path zeroes forces and releases ------------
-def test_apply_failure_ends_with_error_and_still_tears_down(
-    engine: list[FlightEngine],
-    source: CompositeInput,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    backend = FailingApplyBackend()
-    r = run(engine, source, backend)
-    assert (r.stopped_by, r.ticks) == ("error", 0)
-    assert backend.all_off_calls == 1 and backend.closed
-    errors = [rec for rec in caplog.records if rec.levelno == logging.ERROR]
-    assert errors and errors[0].exc_info is not None
-
-
-def test_all_off_failure_does_not_prevent_close(
-    engine: list[FlightEngine], source: CompositeInput, caplog: pytest.LogCaptureFixture
-) -> None:
-    backend = FailingAllOffBackend()
-    r = run(engine, source, backend, max_ticks=1)
-    assert r.stopped_by == "max_ticks" and backend.closed
-    assert "all_off" in caplog.text
-
-
-def test_stop_callback_ends_loop_and_tears_down(
-    engine: list[FlightEngine], source: CompositeInput, backend: RecordingBackend
-) -> None:
-    r = run(engine, source, backend, stop=lambda: len(backend.applied) >= 3)
-    assert (r.stopped_by, r.ticks) == ("stop", 3)
-    assert backend.all_off_calls == 1 and backend.closed
-
-
-def test_interrupt_propagates_after_teardown(
-    engine: list[FlightEngine], backend: RecordingBackend
-) -> None:
-    class InterruptedSource:
-        def read(self) -> None:
-            raise KeyboardInterrupt
-
-    with pytest.raises(KeyboardInterrupt):
-        run(engine, InterruptedSource(), backend)
-    assert backend.all_off_calls == 1 and backend.closed
-
-
-def test_interrupt_inside_teardown_all_off_still_closes(
-    engine: list[FlightEngine], source: CompositeInput
-) -> None:
-    class InterruptingAllOff(RecordingBackend):
-        def all_off(self) -> None:
-            super().all_off()
-            raise KeyboardInterrupt
-
-    backend = InterruptingAllOff()
-    with pytest.raises(KeyboardInterrupt):
-        run(engine, source, backend, max_ticks=1)
-    assert backend.all_off_calls == 1 and backend.closed
 
 
 def test_sleeps_until_the_next_slot_and_never_negative(

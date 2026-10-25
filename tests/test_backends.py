@@ -1,7 +1,5 @@
 """Output backends: clamp ceiling, JSONL force log and the null backend."""
 
-import json
-import logging
 from pathlib import Path
 
 import pytest
@@ -11,9 +9,6 @@ from wardogs_flight_eng.engine.commands import (
     AllOffCommand,
     Axis,
     Command,
-    DamperCommand,
-    FrictionCommand,
-    InertiaCommand,
     PulseCommand,
     SineCommand,
     SpringCommand,
@@ -37,17 +32,6 @@ def test_clamp_scales_magnitudes_to_ceiling() -> None:
     ]
 
 
-def test_logging_backend_writes_jsonl(tmp_path: Path) -> None:
-    p = tmp_path / "forces.jsonl"
-    b = LoggingBackend(p)
-    b.apply(0.01, [SpringCommand(Axis.PITCH, 0.0, 0.35, 0.02)])
-    b.all_off()
-    b.close()
-    lines = [json.loads(line) for line in p.read_text().splitlines()]
-    assert lines[0]["kind"] == "spring" and lines[0]["coefficient"] == 0.35
-    assert lines[-1]["kind"] == "all_off"
-
-
 def test_clamp_limits_each_command_kind_independently() -> None:
     inner = RecordingBackend()
     b = ClampedBackend(inner, ceiling=0.5)
@@ -69,43 +53,6 @@ def test_clamp_limits_each_command_kind_independently() -> None:
         AllOffCommand(),
     ]
     assert inner.times == [1.0]
-
-
-def test_clamp_limits_condition_coefficients_to_ceiling() -> None:
-    inner = RecordingBackend()
-    ClampedBackend(inner, ceiling=0.3).apply(
-        0.0,
-        [
-            FrictionCommand(Axis.PITCH, 0.9),
-            DamperCommand(Axis.ROLL, 0.2),
-            InertiaCommand(Axis.PITCH, float("nan")),
-        ],
-    )
-    assert inner.last == [
-        FrictionCommand(Axis.PITCH, 0.3),
-        DamperCommand(Axis.ROLL, 0.2),
-        InertiaCommand(Axis.PITCH, 0.0),
-    ]
-
-
-def test_logging_backend_records_condition_kinds(tmp_path: Path) -> None:
-    log = tmp_path / "f.jsonl"
-    b = LoggingBackend(log)
-    b.apply(
-        0.5,
-        [
-            FrictionCommand(Axis.PITCH, 0.02),
-            DamperCommand(Axis.ROLL, 0.15),
-            InertiaCommand(Axis.ROLL, 0.05),
-        ],
-    )
-    b.close()
-    rows = [json.loads(line) for line in log.read_text().splitlines()]
-    assert [(r["kind"], r["axis"], r["coefficient"]) for r in rows] == [
-        ("friction", "pitch", 0.02),
-        ("damper", "roll", 0.15),
-        ("inertia", "roll", 0.05),
-    ]
 
 
 def test_clamp_never_sums_same_axis_commands() -> None:
@@ -144,89 +91,6 @@ def test_clamp_delegates_all_off_and_close() -> None:
 def test_clamp_rejects_ceiling_outside_unit_interval(ceiling: float) -> None:
     with pytest.raises(ValueError, match="ceiling"):
         ClampedBackend(RecordingBackend(), ceiling=ceiling)
-
-
-def test_logging_backend_records_every_kind(tmp_path: Path) -> None:
-    p = tmp_path / "forces.jsonl"
-    b = LoggingBackend(p)
-    b.apply(
-        0.5,
-        [
-            SineCommand(Axis.ROLL, 5.0, 0.25),
-            PulseCommand(Axis.PITCH, -0.4, 0.02),
-            TransientCommand(Axis.ROLL, 12.0, 0.3, 0.2, 0.05),
-            AllOffCommand(),
-        ],
-    )
-    b.close()
-    rows = [json.loads(line) for line in p.read_text().splitlines()]
-    assert rows == [
-        {
-            "t": 0.5,
-            "kind": "sine",
-            "axis": "roll",
-            "frequency_hz": 5.0,
-            "magnitude": 0.25,
-        },
-        {
-            "t": 0.5,
-            "kind": "pulse",
-            "axis": "pitch",
-            "magnitude": -0.4,
-            "duration_s": 0.02,
-        },
-        {
-            "t": 0.5,
-            "kind": "transient",
-            "axis": "roll",
-            "frequency_hz": 12.0,
-            "magnitude": 0.3,
-            "duration_s": 0.2,
-            "blend_out_s": 0.05,
-        },
-        {"t": 0.5, "kind": "all_off"},
-    ]
-
-
-def test_logging_backend_all_off_uses_last_time_seen(tmp_path: Path) -> None:
-    p = tmp_path / "forces.jsonl"
-    b = LoggingBackend(p)
-    b.all_off()
-    b.apply(2.5, [SineCommand(Axis.PITCH, 5.0, 0.1)])
-    b.all_off()
-    b.close()
-    rows = [json.loads(line) for line in p.read_text().splitlines()]
-    assert rows[0] == {"t": 0.0, "kind": "all_off"}
-    assert rows[-1] == {"t": 2.5, "kind": "all_off"}
-
-
-def test_logging_backend_close_is_idempotent_and_flushes(tmp_path: Path) -> None:
-    p = tmp_path / "forces.jsonl"
-    b = LoggingBackend(p)
-    b.apply(0.0, [SineCommand(Axis.PITCH, 5.0, 0.1)])
-    b.close()
-    b.close()
-    assert len(p.read_text().splitlines()) == 1
-    assert p.read_text().endswith("\n")
-
-
-def test_logging_backend_warns_and_ignores_calls_after_close(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
-    p = tmp_path / "forces.jsonl"
-    b = LoggingBackend(p)
-    b.close()
-    with caplog.at_level(logging.WARNING):
-        b.apply(0.0, [SineCommand(Axis.PITCH, 5.0, 0.1)])
-        b.all_off()
-    assert p.read_text() == ""
-    assert [r.levelno for r in caplog.records] == [logging.WARNING, logging.WARNING]
-
-
-def test_logging_backend_creates_parent_directory(tmp_path: Path) -> None:
-    p = tmp_path / "nested" / "forces.jsonl"
-    LoggingBackend(p).close()
-    assert p.exists()
 
 
 def test_null_backend_accepts_everything() -> None:

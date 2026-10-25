@@ -1,6 +1,7 @@
 """Clocks, scripted inputs and failing backends for the runtime-loop tests."""
 
 from collections.abc import Sequence
+from typing import Any
 
 from backends_support import RecordingBackend
 
@@ -18,6 +19,7 @@ from wardogs_flight_eng.engine.profile import PROFILES_DIR, load_profile
 from wardogs_flight_eng.engine.synth import FlightEngine
 from wardogs_flight_eng.inputs.composite import CompositeInput
 from wardogs_flight_eng.inputs.simulated import SimulatedDevice
+from wardogs_flight_eng.runtime.loop import LoopResult, run_loop
 
 Devices = dict[str, SimulatedDevice]
 
@@ -118,3 +120,12 @@ def make_source(devices: Devices) -> CompositeInput:
         calibration=Calibration(),
     )
     return CompositeInput(device_map, devices)
+
+
+def run(
+    engines: list[FlightEngine], source: Any, backend: RecordingBackend, **kw: Any
+) -> LoopResult:
+    """``run_loop`` at 100 Hz, 0.25 s watchdog, fake clock, no real sleeping."""
+    options: dict[str, Any] = {"clock": TickClock(0.005), "sleep": lambda s: None}
+    options.update(kw)
+    return run_loop(engines, source, backend, rate_hz=100, watchdog_s=0.25, **options)

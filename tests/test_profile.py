@@ -1,29 +1,17 @@
 import json
 from pathlib import Path
-from typing import Any
 
 import pytest
+from profile_support import PROFILES, raw_profile
 
 from wardogs_flight_eng.constants.loader import load_constants
 from wardogs_flight_eng.engine.frame import Button
 from wardogs_flight_eng.engine.profile import (
-    PROFILES_DIR,
     Calibration,
     DeviceMap,
-    Estimator,
-    Profile,
     ProfileError,
     load_profile,
 )
-
-PROFILES = PROFILES_DIR
-
-
-def _raw(name: str) -> dict[str, Any]:
-    raw: dict[str, Any] = json.loads(
-        (PROFILES / f"{name}.json").read_text(encoding="utf-8")
-    )
-    return raw
 
 
 @pytest.mark.parametrize(
@@ -74,7 +62,7 @@ def test_missing_file_is_profile_error(tmp_path: Path) -> None:
 
 
 def test_misspelt_key_rejected_by_name(tmp_path: Path) -> None:
-    raw = _raw("havoc")
+    raw = raw_profile("havoc")
     raw["feel"]["spring_coeficient"] = 0.4
     bad = tmp_path / "p.json"
     bad.write_text(json.dumps(raw))
@@ -83,7 +71,7 @@ def test_misspelt_key_rejected_by_name(tmp_path: Path) -> None:
 
 
 def test_out_of_range_coefficient_rejected(tmp_path: Path) -> None:
-    raw = _raw("havoc")
+    raw = raw_profile("havoc")
     raw["feel"]["spring_coefficient"] = 1.5
     bad = tmp_path / "p.json"
     bad.write_text(json.dumps(raw))
@@ -135,7 +123,7 @@ def test_device_map_parses_bindings() -> None:
 def test_non_finite_floats_rejected_by_name(
     tmp_path: Path, section: str, key: str, literal: str
 ) -> None:
-    raw = _raw("havoc")
+    raw = raw_profile("havoc")
     raw[section][key] = float(literal.lower().replace("infinity", "inf"))
     text = json.dumps(raw)  # json writes the bare Infinity / NaN literals
     assert literal in text
@@ -159,7 +147,7 @@ def test_non_finite_floats_rejected_by_name(
 def test_gain_above_force_ceiling_rejected_by_name(
     tmp_path: Path, section: str, key: str
 ) -> None:
-    raw = _raw("lakota")
+    raw = raw_profile("lakota")
     raw["safety"]["force_ceiling"] = 0.65
     raw[section][key] = 0.7
     bad = tmp_path / "p.json"
@@ -173,66 +161,3 @@ def test_gain_equal_to_force_ceiling_is_allowed() -> None:
     havoc = load_profile(PROFILES / "havoc.json")
     assert havoc.feel.spring_coefficient == havoc.safety.force_ceiling
     havoc.validate_against(load_constants())
-
-
-def test_shipped_profiles_carry_the_decided_feel() -> None:
-    lb = load_profile(PROFILES / "littlebird-miniguns.json")
-    feel = lb.feel
-    assert (
-        feel.mode,
-        feel.spring_coefficient,
-        feel.friction,
-        feel.clamp_friction,
-        feel.damper,
-        feel.inertia,
-        lb.rotor.airspeed_factor,
-    ) == ("unboosted", 0.12, 0.02, 0.5, 0.15, 0.05, 0.6)
-    assert lb.estimator == Estimator(kind="input", forward_threshold=0.15, tau_s=4.0)
-    havoc = load_profile(PROFILES / "havoc.json")
-    assert havoc.feel.mode == "force_trim" and havoc.feel.clamp_friction is None
-    assert {"friction", "damper", "inertia", "airspeed_factor"} <= set(havoc.taste)
-
-
-def test_v0_1_0_profile_fails_with_migration_hint() -> None:
-    with pytest.raises(ProfileError, match="feel.mode.*predates 0.2.0.*calibrate"):
-        load_profile(Path(__file__).parent / "fixtures" / "littlebird-v0.1.0.json")
-
-
-@pytest.mark.parametrize(
-    ("update", "needle"),
-    [
-        ({"mode": "force_trim", "clamp_friction": 0.4}, "clamp_friction is only valid"),
-        ({"mode": "unboosted", "clamp_friction": None}, "clamp_friction is required"),
-        ({"friction": 0.2}, "spring_coefficient / 4"),  # 0.2 > 0.5 / 4 on lakota
-        (
-            {"mode": "unboosted", "friction": 0.1, "clamp_friction": 0.05},
-            r"clamp_friction 0\.05 must be >= feel\.friction 0\.1",
-        ),
-    ],
-)
-def test_feel_rules_are_enforced(update: dict[str, Any], needle: str) -> None:
-    raw = _raw("lakota")
-    raw["feel"].update(update)
-    with pytest.raises(ProfileError, match=needle):
-        Profile.from_document(raw)
-
-
-def test_condition_gains_above_ceiling_are_profile_errors() -> None:
-    raw = _raw("lakota")
-    raw["feel"]["damper"] = 0.7
-    with pytest.raises(ProfileError, match="feel.damper"):
-        Profile.from_document(raw).validate_against(load_constants())
-
-
-def test_clamp_friction_above_ceiling_is_a_profile_error() -> None:
-    raw = _raw("littlebird-miniguns")
-    raw["feel"]["clamp_friction"] = 0.7
-    with pytest.raises(ProfileError, match=r"feel\.clamp_friction 0\.7 is above"):
-        Profile.from_document(raw).validate_against(load_constants())
-
-
-def test_estimator_threshold_below_one() -> None:
-    raw = _raw("lakota")
-    raw["estimator"]["forward_threshold"] = 1.0
-    with pytest.raises(ProfileError, match="forward_threshold"):
-        Profile.from_document(raw)
