@@ -99,15 +99,24 @@ them to buttons 3 and 17, with nose-up/down and wing-down nudges on 200–203),
 buttons. This is the same tap-to-lock / tap-to-reset model as Flight Eng's
 trim, done in firmware.
 
-Two valid divisions of labour for the tuning pass; pick one, never both:
-- **A (spec default):** Flight Eng owns spring + trim; Cockpit `bacic_spring`
-  0, `hardware_balancing_enable` 0, Cockpit keeps damper / friction / inertia
-  / breakout. Portable to any DirectInput base.
+Two valid divisions of labour for the tuning pass (as of 0.2.0); pick one,
+never both:
+- **A (spec default):** Flight Eng owns spring, friction, damper, inertia and
+  trim; Cockpit `bacic_spring` 0, `hardware_balancing_enable` 0, and its
+  `bacic_damper` / `bacic_friction` / `bacic_inertia` low or 0, because they
+  would stack with Flight Eng's own conditions (how the base combines the
+  two is unmeasured until the hardware pass). Portable to any DirectInput
+  base.
 - **B (Moza-native trim):** Cockpit owns spring + hardware trim (bind the
-  trim and recenter buttons); Flight Eng profile sets
-  `feel.spring_coefficient` 0 and supplies only rotor buzz and recoil. Lower
-  latency trim in firmware, AB9-only. No code change: a zero spring
-  coefficient disables Flight Eng's spring and makes its trim buttons inert.
+  trim and recenter buttons); a `force_trim` Flight Eng profile sets
+  `feel.spring_coefficient` 0, which also forces `feel.friction` to 0 (it may
+  be at most a quarter of the spring), and still plays damper, inertia, rotor
+  buzz and recoil. Lower latency trim in firmware, AB9-only. No code change:
+  a zero spring coefficient disables Flight Eng's spring and makes its
+  `force_trim` trim buttons inert. Not so in `unboosted` mode: spring 0
+  leaves the clamp fully working (`trim_lock` still engages
+  `feel.clamp_friction`), so B is not a way to make the trim buttons inert
+  there.
 
 ## Moza Cockpit `.preset` file format (from a public AB6 preset, GPL-3.0 repo)
 

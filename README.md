@@ -387,9 +387,10 @@ friction, damper and inertia it supports. A missing damper or inertia (or,
 in a `force_trim` profile, a missing friction) is dropped and logged once as
 a WARNING; the rest of the feel runs without it. A base without friction,
 or one that reports no capabilities at all, cannot hold an `unboosted`
-clamp, so `run` refuses to start any `unboosted` profile on it (exit 1) and
-says to set that profile's `feel.mode` to `force_trim` or use a base with
-friction. `check-device` shows the same support up front (see "First run").
+clamp, so when any loaded profile is `unboosted`, `run` refuses the whole
+run on it (exit 1) and says to set that profile's `feel.mode` to
+`force_trim` or use a base with friction. `check-device` shows the same
+support up front (see "First run").
 
 **Profiles from 0.1.0.** The profile format changed in 0.2.0: `feel.mode`,
 `feel.friction`, `feel.damper`, `feel.inertia`, `rotor.airspeed_factor` and
@@ -529,9 +530,9 @@ code task.
    power-cycle it and open an issue.
 6. **Clamp hold** (`unboosted` profiles). Fly with the stick off centre,
    tap `trim_lock` to clamp, and let go. Over 10 s the stick must not creep:
-   ADS-33E-PRF §3.6.6 allows no slippage of the trim position. If it creeps,
-   raise `feel.clamp_friction` until it holds, keeping it at or below
-   `safety.force_ceiling`.
+   ADS-33E-PRF §3.6.6 asks for no objectionable slippage of the trim
+   position. If it creeps, raise `feel.clamp_friction` until it holds,
+   keeping it at or below `safety.force_ceiling`.
 7. **Release settle.** Tap `trim_reset` (in an `unboosted` profile this
    releases the clamp) and let go. The stick must come back to within the
    stopping band, `friction / spring_coefficient` of travel from the centre,
