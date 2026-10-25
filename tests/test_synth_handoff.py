@@ -1,4 +1,4 @@
-"""Profile handoff: the all-off setter, primed buttons and ``take_over``."""
+"""Profile handoff: ``take_over`` is the only way to carry state over."""
 
 import pytest
 from synth_support import engine_for, frame, pitch_friction
@@ -11,23 +11,26 @@ from wardogs_flight_eng.engine.commands import (
     SpringCommand,
 )
 from wardogs_flight_eng.engine.frame import Button
+from wardogs_flight_eng.engine.synth import FlightEngine
 
 
-def test_profile_and_all_off_setter_for_profile_handoff() -> None:
-    e = engine_for("lakota")
-    assert e.profile.name == "lakota"
-    e.all_off = True
-    assert e.step(0.01, frame()) == [AllOffCommand()]
-    e.all_off = False
-    assert e.step(0.01, frame()) != [AllOffCommand()]
+def test_engine_has_no_public_latch_setter_or_prime() -> None:
+    assert not hasattr(FlightEngine, "prime_buttons")
+    assert isinstance(FlightEngine.all_off, property)
+    assert FlightEngine.all_off.fset is None
 
 
-def test_primed_buttons_are_not_taps() -> None:
-    e = engine_for("lakota")
-    e.all_off = True
-    e.prime_buttons(frozenset({Button.ALL_OFF}))
-    assert e.step(0.01, frame(0, 0, 0, 0, Button.ALL_OFF)) == [AllOffCommand()]
-    assert e.all_off is True  # held across the handoff: no toggle
+def test_profile_and_latch_carried_into_a_handoff() -> None:
+    lb, lak = engine_for("littlebird-miniguns"), engine_for("lakota")
+    assert lak.profile.name == "lakota"
+    lb.step(0.01, frame(0, 0, 0, 0, Button.ALL_OFF))
+    lb.step(0.01, frame())
+    lak.take_over(lb)
+    assert lak.all_off is True
+    assert lak.step(0.01, frame()) == [AllOffCommand()]
+    lak.step(0.01, frame(0, 0, 0, 0, Button.ALL_OFF))  # tapped again: released
+    assert lak.all_off is False
+    assert lak.step(0.01, frame()) != [AllOffCommand()]
 
 
 def test_take_over_resets_feel_and_airspeed_and_carries_the_rotor() -> None:

@@ -1,6 +1,7 @@
 """SDL haptic backend: condition effects and device capability gating."""
 
 import logging
+from typing import get_args
 
 import pytest
 from sdl_haptic_support import (
@@ -126,3 +127,33 @@ def test_all_off_silences_conditions_and_close_destroys_them() -> None:
     assert all(e.condition.right_coeff == (0, 0, 0) for e in fake.effects.values())
     backend.close()
     assert len(destroyed_ids(fake)) == 2
+
+
+def test_every_condition_command_has_an_sdl_type() -> None:
+    fake = FakeSdl(stick())
+    kinds = {
+        fake.SDL_HAPTIC_FRICTION,
+        fake.SDL_HAPTIC_DAMPER,
+        fake.SDL_HAPTIC_INERTIA,
+    }
+    for kind in get_args(ConditionCommand):
+        effect = condition_effect(fake, STANDARD_AXES, kind(Axis.PITCH, 0.1), 1000)
+        assert effect.type in kinds
+
+
+def test_capability_warnings_fire_at_construction(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    fake = FakeSdl(
+        stick(),
+        supported=FakeSdl.SDL_HAPTIC_CONSTANT
+        | FakeSdl.SDL_HAPTIC_SINE
+        | FakeSdl.SDL_HAPTIC_SPRING,
+    )
+    with caplog.at_level(logging.WARNING):
+        backend = open_backend(fake)
+    assert sum("friction" in r.message for r in caplog.records) == 1
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        backend.apply(0.0, [FrictionCommand(Axis.PITCH, 0.1)])
+    assert not caplog.records

@@ -32,6 +32,8 @@ from wardogs_flight_eng.engine.profile_sections import (
 )
 
 __all__ = [
+    "MIGRATION_HINT",
+    "MIGRATION_HINT_FIELDS",
     "PROFILES_DIR",
     "AxisBinding",
     "AxisName",
@@ -57,9 +59,19 @@ MIGRATION_HINT: Final[str] = (
     "this profile predates 0.2.0: copy the shipped profile for its airframe "
     "from the profiles directory, fill device_map and re-run calibrate"
 )
-"""Appended when a 0.2.0 field under ``feel``, ``rotor`` or ``estimator`` is missing."""
+"""Appended when one of ``MIGRATION_HINT_FIELDS`` is missing."""
 
-_MIGRATED_SECTIONS: Final[frozenset[str]] = frozenset({"feel", "rotor", "estimator"})
+MIGRATION_HINT_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "feel.mode",
+        "feel.friction",
+        "feel.damper",
+        "feel.inertia",
+        "rotor.airspeed_factor",
+        "estimator",
+    }
+)
+"""The fields 0.2.0 added; a profile missing any of them predates 0.2.0."""
 
 
 class ProfileError(ValueError):
@@ -130,14 +142,15 @@ class Profile(ProfileModel):
 
 def _describe(err: ValidationError) -> str:
     """Every validation failure as ``dotted.field: reason``, first failure first,
-    plus the migration hint when a 0.2.0 section field is missing."""
+    plus the migration hint when one of ``MIGRATION_HINT_FIELDS`` is missing."""
     errors = err.errors()
     described = "; ".join(
         f"{'.'.join(str(part) for part in e['loc']) or '<document>'}: {e['msg']}"
         for e in errors
     )
     if any(
-        e["type"] == "missing" and e["loc"] and e["loc"][0] in _MIGRATED_SECTIONS
+        e["type"] == "missing"
+        and ".".join(str(part) for part in e["loc"]) in MIGRATION_HINT_FIELDS
         for e in errors
     ):
         return f"{described}; {MIGRATION_HINT}"

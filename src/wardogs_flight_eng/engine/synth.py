@@ -73,25 +73,13 @@ class FlightEngine:
         """``True`` while the ALL_OFF latch holds every force off."""
         return self._all_off
 
-    @all_off.setter
-    def all_off(self, value: bool) -> None:
-        """Set the latch, e.g. carried over from the engine handing off control."""
-        self._all_off = value
-
-    def prime_buttons(self, held: frozenset[Button]) -> None:
-        """Treat ``held`` as last tick's buttons, so still-held ones are not taps.
-
-        Used when this engine takes over mid-flight: without it a button held
-        across a profile switch (ALL_OFF above all) would read as a fresh tap.
-        """
-        self._previous_held = held
-
     def take_over(self, outgoing: "FlightEngine") -> None:
         """Take control from ``outgoing`` on a profile switch.
 
         The feel restarts centred and free, the airspeed estimate at rest and
         the weapon idle; the rotor adopts the outgoing spool fraction and
-        running flag; the ALL_OFF latch and the held buttons carry over.
+        running flag; the ALL_OFF latch and the held buttons carry over, so a
+        button held across the switch (ALL_OFF above all) is not a fresh tap.
         Taking over from itself is a no-op.
         """
         if outgoing is self:
@@ -101,8 +89,8 @@ class FlightEngine:
         self._state = _AT_REST
         self._rotor.take_over(outgoing._rotor.spool_fraction, outgoing._rotor.running)
         self._weapon, self._pulse_s = build_weapon(self._profile, self._constants)
-        self._all_off = outgoing.all_off
-        self.prime_buttons(outgoing._previous_held)
+        self._all_off = outgoing._all_off
+        self._previous_held = outgoing._previous_held
 
     def step(self, dt: float, frame: ControlFrame) -> list[Command]:
         """Advance ``dt`` seconds and return this tick's commands.

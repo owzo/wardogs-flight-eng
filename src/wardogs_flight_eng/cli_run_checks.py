@@ -1,7 +1,9 @@
-"""What ``run`` checks from the profiles alone, before any device is opened.
+"""What ``run`` checks before it drives the base.
 
-``refuse_unboosted_without_friction`` is pure as well: the caller supplies the
-condition kinds the base lacks, read from the one haptic channel it opens.
+``shared_map`` and ``haptic_axes`` read the profiles alone, before any device
+is opened. ``refuse_unboosted_without_friction`` is pure as well, but runs
+after the base opens: the caller supplies the condition kinds the base lacks,
+read from the one haptic channel it opens.
 """
 
 from collections.abc import Sequence

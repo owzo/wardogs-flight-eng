@@ -34,7 +34,7 @@ class StateEstimator(Protocol):
         ...
 
     def restart(self) -> None:
-        """Forget accumulated state (for example on an all-off)."""
+        """Forget accumulated state; ``FlightEngine.take_over`` calls it."""
         ...
 
 

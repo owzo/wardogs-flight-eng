@@ -35,8 +35,8 @@ def write_calibration(path: Path, calibration: Calibration) -> None:
     document["device_map"]["calibration"] = calibration.model_dump()
     text = json.dumps(document, indent=2, ensure_ascii=False) + "\n"
     try:
-        Profile.model_validate_json(text)
-    except ValueError as err:
+        Profile.from_document(json.loads(text))
+    except ProfileError as err:
         raise ProfileError(f"calibrated profile {path} would not load: {err}") from err
     staging = path.with_name(f"{path.name}.tmp")
     staging.write_text(text, encoding="utf-8")

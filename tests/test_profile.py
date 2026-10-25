@@ -4,14 +4,19 @@ from pathlib import Path
 import pytest
 from profile_support import PROFILES, raw_profile
 
+from wardogs_flight_eng.cli_profiles import write_calibration
 from wardogs_flight_eng.constants.loader import load_constants
 from wardogs_flight_eng.engine.frame import Button
 from wardogs_flight_eng.engine.profile import (
+    MIGRATION_HINT_FIELDS,
     Calibration,
     DeviceMap,
+    Profile,
     ProfileError,
     load_profile,
 )
+
+FIXTURES = Path(__file__).parent / "fixtures"
 
 
 @pytest.mark.parametrize(
@@ -161,3 +166,32 @@ def test_gain_equal_to_force_ceiling_is_allowed() -> None:
     havoc = load_profile(PROFILES / "havoc.json")
     assert havoc.feel.spring_coefficient == havoc.safety.force_ceiling
     havoc.validate_against(load_constants())
+
+
+@pytest.mark.parametrize("field", sorted(MIGRATION_HINT_FIELDS))
+def test_missing_0_2_0_field_gets_the_migration_hint(field: str) -> None:
+    raw = raw_profile("lakota")
+    *parents, leaf = field.split(".")
+    section = raw
+    for part in parents:
+        section = section[part]
+    del section[leaf]
+    with pytest.raises(ProfileError, match=f"{field}: .*predates 0.2.0"):
+        Profile.from_document(raw)
+
+
+def test_missing_pre_existing_field_gets_no_migration_hint() -> None:
+    raw = raw_profile("lakota")
+    del raw["rotor"]["base_amplitude"]
+    with pytest.raises(ProfileError) as err:
+        Profile.from_document(raw)
+    assert "predates 0.2.0" not in str(err.value)
+    assert "base_amplitude" in str(err.value)
+
+
+def test_calibrate_rewrite_path_reports_the_migration_hint(tmp_path: Path) -> None:
+    old = tmp_path / "old.json"
+    old.write_bytes((FIXTURES / "littlebird-v0.1.0.json").read_bytes())
+    with pytest.raises(ProfileError, match="predates 0.2.0"):
+        write_calibration(old, Calibration())
+    assert old.read_bytes() == (FIXTURES / "littlebird-v0.1.0.json").read_bytes()

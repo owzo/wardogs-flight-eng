@@ -27,6 +27,11 @@ from wardogs_flight_eng.outputs.protocol import ForceBackend
 
 logger = logging.getLogger(__name__)
 
+ClampableCommand = (
+    SpringCommand | SineCommand | PulseCommand | TransientCommand | ConditionCommand
+)
+"""Every command with a strength the clamp limits (all but ``AllOffCommand``)."""
+
 
 class ClampedBackend:
     """Wraps a backend and caps every command's strength at ``ceiling``.
@@ -96,11 +101,7 @@ class ClampedBackend:
 
     def _unchanged(
         self,
-        command: SpringCommand
-        | SineCommand
-        | PulseCommand
-        | TransientCommand
-        | ConditionCommand,
+        command: ClampableCommand,
         value: float,
         limited: float,
     ) -> bool:

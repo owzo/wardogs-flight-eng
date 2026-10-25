@@ -6,6 +6,8 @@ A spring carries a centre and deadband from its command; friction, damper and
 inertia are centred at 0 with no deadband, so only the coefficient varies.
 """
 
+from typing import assert_never
+
 from wardogs_flight_eng.engine.commands import (
     ConditionCommand,
     DamperCommand,
@@ -18,12 +20,6 @@ from wardogs_flight_eng.outputs.haptic_axes import HapticAxisMap
 from wardogs_flight_eng.outputs.sdl_effects import direction, on_axis, scale
 
 SATURATION_MAX = 0xFFFF
-
-_CONDITION_TYPES: dict[type, str] = {
-    FrictionCommand: "SDL_HAPTIC_FRICTION",
-    DamperCommand: "SDL_HAPTIC_DAMPER",
-    InertiaCommand: "SDL_HAPTIC_INERTIA",
-}
 
 
 def spring_effect(
@@ -59,5 +55,17 @@ def condition_effect(
         right_coeff=coefficient,
         left_coeff=coefficient,
     )
-    effect_type: int = getattr(api, _CONDITION_TYPES[type(command)])
-    return HapticEffect(effect_type, condition=condition)
+    return HapticEffect(condition_type(api, command), condition=condition)
+
+
+def condition_type(api: SdlApi, command: ConditionCommand) -> int:
+    """The SDL effect type for ``command``'s class."""
+    match command:
+        case FrictionCommand():
+            return api.SDL_HAPTIC_FRICTION
+        case DamperCommand():
+            return api.SDL_HAPTIC_DAMPER
+        case InertiaCommand():
+            return api.SDL_HAPTIC_INERTIA
+        case _:
+            assert_never(command)

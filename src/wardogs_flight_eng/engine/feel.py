@@ -107,7 +107,8 @@ class FeelModel:
         feel = self._feel
         spring = feel.spring_coefficient
         friction = feel.friction
-        if self._unboosted and feel.clamp_friction is not None:
+        if self._unboosted:
+            assert feel.clamp_friction is not None  # Feel requires it when unboosted
             c = self._blend.value
             spring = spring * (1.0 - c)
             friction = friction + (feel.clamp_friction - friction) * c
