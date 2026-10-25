@@ -77,7 +77,7 @@ class FakeEffectCalls(ABC):
 
     def create_effect(self, dev: object, effect: DiEffect) -> tuple[int, object]:
         owner = self._owner(dev)
-        status = self._status("create_effect", (effect,))
+        status = self._status("create_effect", (effect,), owner)
         if status < 0:
             return status, None
         if effect.kind not in owner.kinds:
@@ -114,7 +114,7 @@ class FakeEffectCalls(ABC):
 
     def stop(self, effect_handle: object) -> int:
         found = self._live(effect_handle)
-        status = self._status("stop", (found.effect_id,))
+        status = self._status("stop", (found.effect_id,), found.owner)
         if status >= 0:
             self.playing.discard(found.effect_id)
         return status

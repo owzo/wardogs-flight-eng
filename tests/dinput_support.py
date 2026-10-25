@@ -1,15 +1,15 @@
 """A fake DirectInput 8 for the dinput tests: records the calls it gets.
 
-``FakeDirectInput`` implements ``DirectInputApi`` over in-memory
-``FakeDiDevice``\\ s. A status call returns ``fail[name]`` when that name is
-set; while its device is detached, ``poll_state``, ``start``,
-``set_parameters`` and ``ff_command`` return ``lost_code``
-(``DIERR_INPUTLOST`` unless a test picks another lost-device code), and
-``poll_state`` before ``acquire`` returns ``DIERR_NOTACQUIRED``.
-``calls`` records every call except the pure queries (``enumerate_devices``,
-``axes``, ``enum_effect_kinds``, ``get_ff_gain``); device handles are left
-out of the arguments except as the instance GUID of ``open_device`` and
-``release_device``, and effect handles appear as their effect id.
+``FakeDirectInput`` implements ``DirectInputApi`` over ``FakeDiDevice`` objects.
+A status call returns ``fail[name]`` when set. On a detached device every
+device call returns ``lost_code`` (default ``DIERR_INPUTLOST``) and changes
+nothing, except teardown (``unacquire``, ``release_effect``,
+``release_device``, ``close``), which succeeds as the real calls do.
+``poll_state`` before ``acquire`` is ``DIERR_NOTACQUIRED``; ``ff_command``
+with anything but one ``DISFFC_*`` command is ``DIERR_INVALIDPARAM``.
+``calls`` skips the queries (``enumerate_devices``, ``axes``,
+``enum_effect_kinds``, ``get_ff_gain``), omits device handles (open/release
+record the instance GUID) and shows effect handles as their id.
 """
 
 from dataclasses import dataclass
@@ -30,6 +30,7 @@ from wardogs_flight_eng.inputs.dinput_api import (
 PLACEHOLDER_AB9_VID = 0x346E
 PLACEHOLDER_AB9_PID = 0x0010
 CENTRE = 32767
+_COMMANDS = (di.DISFFC_RESET, di.DISFFC_STOPALL, di.DISFFC_SETACTUATORSON)
 
 
 @dataclass
@@ -125,30 +126,34 @@ class FakeDirectInput(FakeEffectCalls):
         return list(_device(dev).axes)
 
     def set_cooperative_exclusive_background(self, dev: object) -> int:
-        status = self._status("set_cooperative_exclusive_background", ())
+        device = _device(dev)
+        status = self._status("set_cooperative_exclusive_background", (), device)
         if status >= 0:
-            _device(dev).exclusive = True
+            device.exclusive = True
         return status
 
     def set_autocenter_off(self, dev: object) -> int:
-        status = self._status("set_autocenter_off", ())
+        device = _device(dev)
+        status = self._status("set_autocenter_off", (), device)
         if status >= 0:
-            _device(dev).autocenter = False
+            device.autocenter = False
         return status
 
     def set_ff_gain(self, dev: object, gain: int) -> int:
-        status = self._status("set_ff_gain", (gain,))
+        device = _device(dev)
+        status = self._status("set_ff_gain", (gain,), device)
         if status >= 0:
-            _device(dev).gain = gain
+            device.gain = gain
         return status
 
     def get_ff_gain(self, dev: object) -> int:
         return _device(dev).gain
 
     def acquire(self, dev: object) -> int:
-        status = self._status("acquire", ())
+        device = _device(dev)
+        status = self._status("acquire", (), device)
         if status >= 0:
-            _device(dev).acquired = True
+            device.acquired = True
         return status
 
     def unacquire(self, dev: object) -> int:
@@ -162,11 +167,13 @@ class FakeDirectInput(FakeEffectCalls):
         status = self._status("ff_command", (command,), device)
         if status < 0:
             return status
+        if command not in _COMMANDS:
+            return di.DIERR_INVALIDPARAM
         if command == di.DISFFC_RESET:
             self._reset_owned(device)
         elif command == di.DISFFC_STOPALL:
             self._stop_owned(device)
-        elif command == di.DISFFC_SETACTUATORSON:
+        else:
             device.actuators_on = True
         return status
 
