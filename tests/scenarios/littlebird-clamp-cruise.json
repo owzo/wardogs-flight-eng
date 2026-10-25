@@ -1,0 +1,48 @@
+{
+  "rate_hz": 100,
+  "device_map": {
+    "devices": {
+      "stick": {"guid": "sim-stick", "product": null},
+      "grip": {"guid": "sim-grip", "product": null},
+      "coll": {"guid": "sim-coll", "product": null},
+      "ped": {"guid": "sim-ped", "product": null}
+    },
+    "axes": {
+      "pitch": {"device": "stick", "axis": 0},
+      "roll": {"device": "stick", "axis": 1},
+      "collective": {"device": "coll", "axis": 0},
+      "pedals": {"device": "ped", "axis": 0}
+    },
+    "buttons": {
+      "trim_lock": {"device": "grip", "button": 0},
+      "trim_reset": {"device": "grip", "button": 1},
+      "fire": {"device": "grip", "button": 2},
+      "reload": {"device": "grip", "button": 3},
+      "rotor_toggle": {"device": "grip", "button": 4},
+      "profile_cycle": {"device": "grip", "button": 5},
+      "all_off": {"device": "grip", "button": 6}
+    },
+    "calibration": {
+      "collective_bottom_raw": -1,
+      "collective_top_raw": 1,
+      "pedals_center_raw": 0
+    }
+  },
+  "devices": {
+    "stick": {"axes": 2, "buttons": 0},
+    "grip": {"axes": 0, "buttons": 8},
+    "coll": {"axes": 1, "buttons": 0},
+    "ped": {"axes": 1, "buttons": 0}
+  },
+  "steps": [
+    {"t": 0.0, "set": {"coll.axis0": -1.0}},
+    {"t": 1.0, "set": {"coll.axis0": 0.2}},
+    {"t": 4.0, "set": {"stick.axis0": 0.6}},
+    {"t": 10.0, "set": {"grip.button0": true}},
+    {"t": 10.1, "set": {"grip.button0": false}},
+    {"t": 14.0, "set": {"grip.button1": true}},
+    {"t": 14.1, "set": {"grip.button1": false}},
+    {"t": 15.0, "set": {"stick.axis0": 0.0}},
+    {"t": 17.0, "set": {}}
+  ]
+}

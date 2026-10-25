@@ -44,8 +44,9 @@ def test_plot_has_one_row_per_axis(tmp_path: Path) -> None:
         profile("littlebird-miniguns"), load_constants(), scenario, tmp_path
     )
     html = plot.read_text(encoding="utf-8")
-    assert html.count('class="axis-row"') == 2
-    assert "pitch" in html and "roll" in html
+    assert html.count('class="title"') == 4
+    for title in ("pitch", "roll", "pitch gains", "roll gains"):
+        assert f">{title}<" in html
 
 
 def test_plot_draws_every_event_and_the_all_off_marker(tmp_path: Path) -> None:
@@ -83,3 +84,29 @@ def test_plot_of_an_empty_log_still_has_both_rows(tmp_path: Path) -> None:
     out = tmp_path / "plot.html"
     write_plot_html(log, out)
     assert out.read_text(encoding="utf-8").count('class="axis-row"') == 2
+
+
+def test_plot_draws_gain_lines_for_each_condition(tmp_path: Path) -> None:
+    log = _write_log(
+        tmp_path / "f.jsonl",
+        [
+            {"t": 0.0, "kind": "friction", "axis": "pitch", "coefficient": 0.02},
+            {"t": 0.3, "kind": "friction", "axis": "pitch", "coefficient": 0.5},
+            {"t": 0.0, "kind": "damper", "axis": "roll", "coefficient": 0.15},
+            {"t": 0.0, "kind": "inertia", "axis": "roll", "coefficient": 0.05},
+            {
+                "t": 0.0,
+                "kind": "spring",
+                "axis": "pitch",
+                "center": 0.0,
+                "coefficient": 0.12,
+                "deadband": 0.02,
+            },
+        ],
+    )
+    out = tmp_path / "f.html"
+    write_plot_html(log, out)
+    page = out.read_text(encoding="utf-8")
+    assert page.count('class="friction-line"') == 1
+    assert 'class="damper-line"' in page and 'class="inertia-line"' in page
+    assert ">pitch gains<" in page and ">roll gains<" in page

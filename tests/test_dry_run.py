@@ -81,3 +81,57 @@ def test_dry_run_fails_loudly_when_the_loop_stops_early(
     monkeypatch.setattr(FlightEngine, "step", broken_step)
     with pytest.raises(RuntimeError, match="ended early.*error"):
         _run(tmp_path)
+
+
+def _clamp_run(tmp_path: Path) -> list[dict[str, Any]]:
+    scenario = Scenario.load(SCENARIOS / "littlebird-clamp-cruise.json")
+    log, _ = dry_run(
+        profile("littlebird-miniguns"), load_constants(), scenario, tmp_path
+    )
+    return _rows(log)
+
+
+def _at(rows: list[dict[str, Any]], kind: str, axis: str, t: float) -> dict[str, Any]:
+    """The record of ``kind`` on ``axis`` nearest to ``t``."""
+    return min(
+        (r for r in rows if r["kind"] == kind and r["axis"] == axis),
+        key=lambda r: abs(r["t"] - t),
+    )
+
+
+def test_dry_run_clamp_swaps_spring_for_friction_and_back(tmp_path: Path) -> None:
+    rows = _clamp_run(tmp_path)
+    friction, spring = (
+        _at(rows, "friction", "pitch", 9.0),
+        _at(rows, "spring", "pitch", 9.0),
+    )
+    assert (friction["coefficient"], spring["coefficient"]) == (0.02, 0.12)
+    assert _at(rows, "friction", "pitch", 11.0)["coefficient"] == pytest.approx(0.5)
+    assert _at(rows, "spring", "pitch", 11.0)["coefficient"] == 0.0
+    assert _at(rows, "spring", "pitch", 11.0)["center"] == 0.0
+    assert _at(rows, "spring", "pitch", 15.0)["coefficient"] == 0.12
+    assert _at(rows, "friction", "pitch", 15.0)["coefficient"] == 0.02
+
+
+def test_dry_run_buzz_grows_with_the_airspeed_estimate(tmp_path: Path) -> None:
+    rows = _clamp_run(tmp_path)
+    early = _at(rows, "sine", "pitch", 4.05)["magnitude"]
+    late = _at(rows, "sine", "pitch", 9.9)["magnitude"]
+    # Airspeed 0.41 x factor 0.6 after 5.9 s at tau 4 s; spool and collective equal.
+    assert late > 1.15 * early
+
+
+def test_dry_run_lakota_conditions_are_constant(tmp_path: Path) -> None:
+    scenario = Scenario.load(SCENARIOS / "takeoff-trim-fire.json")
+    log, _ = dry_run(profile("lakota"), load_constants(), scenario, tmp_path)
+    rows = _rows(log)
+    dampers = {
+        r["coefficient"] for r in rows if r["kind"] == "damper" and r["axis"] == "pitch"
+    }
+    frictions = [
+        r["coefficient"]
+        for r in rows
+        if r["kind"] == "friction" and r["axis"] == "roll"
+    ]
+    assert dampers == {0.25}
+    assert frictions and frictions == pytest.approx([0.05] * len(frictions))
