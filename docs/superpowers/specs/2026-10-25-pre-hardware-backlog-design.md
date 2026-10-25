@@ -103,7 +103,9 @@ Code and test items only; wording nits ride along where the file is open.
 - **Refresh flag.** `run --refresh-every-tick` passes
   `refresh_every_tick=True` to `SdlHapticBackend`; default off. The
   environment variable stays for the hardware test. README "Hardware tuning
-  pass" step 3 names the flag.
+  pass" step 3 names the flag. It is an SDL-backend option: the dinput8
+  spec (which merges after this one) rejects it with `--backend dinput8`
+  as a usage error.
 
 ## 3. Continuous integration (decided)
 
@@ -118,6 +120,13 @@ Code and test items only; wording nits ride along where the file is open.
   artifact named after the tag. No release is created.
 - README Status gains a CI badge line; the release procedure in the README
   says to download the artifact and attach it to the GitHub release.
+- **Verification (author's call).** The builder does not push. Locally: a
+  test asserts both workflow files exist, parse as YAML-shaped text with
+  the four gate commands and the PyInstaller command present, and that the
+  tag workflow uploads `dist/wardogs-flight-eng.exe`. The live proof (green
+  legs, an artifact) happens when the owner approves the push at release
+  time; that release is 0.3.0 and the version bump belongs to the dinput8
+  plan's final task, which merges after this one.
 
 ## 4. Hold-to-release trim (decided)
 
@@ -143,6 +152,20 @@ called every tick with the held state; `FlightEngine._dispatch` routes
 level) per the profile. `restart()` also clears any held state. Shipped
 profiles stay `tap`. README "Feel modes" documents both styles.
 
+Builder-check rulings (author's calls):
+
+- **Held across a handoff.** `FlightEngine.take_over` sets a
+  `trim_lock_blocked` flag when `TRIM_LOCK` is in the outgoing engine's
+  last held set; while blocked the engine passes `pressed=False` to
+  `hold()` and treats the button as not tapped; the flag clears on the
+  first tick where `TRIM_LOCK` is not held. So the incoming engine never
+  starts slack or clamped, whatever the styles of the two profiles. After
+  an ALL_OFF-latched or watchdog-gated tick (no dispatch), the next
+  dispatched tick simply applies the current level (catch-up).
+- **Release mid-slew.** The re-stiffen continues from the current
+  fraction at the fixed rate `1 / trim_slew_s` (the `_Blend` behaviour),
+  never restarts from zero.
+
 ## 5. Moza Cockpit preset emitter (decided)
 
 ```
@@ -165,7 +188,13 @@ wardogs-flight-eng make-preset --profile <profile.json> --template <your-export.
   configuration error naming the rule); `bacic_damper`, `bacic_friction`,
   `bacic_inertia` 0, `hardware_balancing_enable` 1,
   `bacic_gameForceFeedback` 100; `bacic_spring` and the trim button ids are
-  left as the template has them (the user's taste).
+  left as the template has them (the user's taste). B is **refused** when
+  `hardware_balancing_trim` or `hardware_balancing_recenter` is missing or
+  0 in the template, with a message naming both keys and saying to bind
+  the buttons in Moza Cockpit and export again, because a B preset without
+  them has no working trim at all (Flight Eng's is inert at spring 0).
+- `--profile` is required for both divisions: A loads and validates it
+  too, and the summary table names the profile and its mode.
 - Metadata: `name` = `--name` or `"<template name> + Flight Eng <division>"`;
   `uuid` = a new `{uuid4}` in braces; `date` = current Unix seconds as a
   string, matching the template's type. Nothing else changes.
@@ -183,9 +212,18 @@ wardogs-flight-eng record --profile <profile.json> --out <scenario.json>
 ```
 
 - Opens the devices named by the profile's `device_map` exactly as `run`
-  does (same errors for missing devices) and reads raw axes and buttons at
-  `--rate` Hz with a `NullBackend`; it never opens the haptic side and
-  never commands a force. Ends on Ctrl+C or after `--duration` seconds.
+  does (same errors for missing devices) and reads the `SdlDevice` objects
+  directly (raw axes and buttons, no `CompositeInput`, so no calibration
+  or full binding is required) at `--rate` Hz; it constructs no force
+  backend at all, never opens the haptic side and never commands a force.
+  Ends on Ctrl+C or after `--duration` seconds. If the profile's
+  calibration is still the shipped default, a WARNING says the replay will
+  use that calibration.
+- A change is recorded when a raw axis moves by at least `--min-change`
+  (default 0.005) from the last value written for that axis, or a button
+  flips; this hysteresis keeps a noisy axis from writing a step every tick.
+- A device lost or an SDL failure mid-recording writes the partial scenario
+  (with its closing empty step) and exits 2; a flight is not repeatable.
 - Writes a scenario in the existing format: `rate_hz`, the profile's
   `device_map` verbatim, `devices` from the opened devices (alias, axis
   and button counts), and `steps`: at `t 0.0` every axis and button's
@@ -218,8 +256,8 @@ wardogs-flight-eng record --profile <profile.json> --out <scenario.json>
 ## Acceptance
 
 1. Gates green on both CI legs; the tag workflow produces an artifact.
-2. Every item in section 1 has a commit, and the deferred list in the
-   0.2.0 ledger copy is empty of code items.
+2. Every bullet in section 1 is implemented (the bullets are the complete
+   list); one commit per bullet or per file group.
 3. Engine tests: buzz floor; `hold` style in both modes including release
    re-anchoring at the stick position, slack and re-stiffen timing, reset
    behaviour, and restart clearing a held state.

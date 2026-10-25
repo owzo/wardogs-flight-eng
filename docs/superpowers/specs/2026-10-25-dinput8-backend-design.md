@@ -32,7 +32,10 @@ paths, turns that day from "stop and rewrite" into "switch a flag".
    device instance, with `list-devices --backend dinput8` to show what
    DirectInput sees.
 4. `run --backend {sdl,dinput8}` (default `sdl`) and
-   `check-device --backend {sdl,dinput8}`; input always stays on SDL.
+   `check-device --backend {sdl,dinput8}`; with `dinput8` the **force base
+   is read and driven through one DirectInput device object**, while every
+   other device (collective, pedals, grips) stays on SDL. See "Builder-check
+   rulings" for why.
 5. Capability gating equivalent to the SDL one: unsupported condition
    kinds dropped with one warning; an `unboosted` profile refused without
    friction.
@@ -41,7 +44,8 @@ paths, turns that day from "stop and rewrite" into "switch a flag".
 
 ## Non-goals
 
-- Replacing SDL for input, enumeration or calibration.
+- Replacing SDL for enumeration, calibration, or the input of any device
+  other than the force base under `--backend dinput8`.
 - Supporting effects the engine does not emit (ramp, square, custom).
 - The Moza Flight SDK (proprietary; the reference doc covers why).
 - XInput, RawInput or Windows.Gaming.Input.
@@ -65,11 +69,14 @@ paths, turns that day from "stop and rewrite" into "switch a flag".
 - Project rules as before (pure `engine/`, 200-line files, 50-line
   functions, `logging`, no bare `except`, no TODOs, the four gates).
 - `engine/` is untouched. `outputs/dinput_*` import `engine.commands`, the
-  seam and `outputs/haptic_axes` only; `inputs/dinput_real.py` is the only
-  module that imports `ctypes`.
-- The layering test gains `inputs.dinput_real` to the set of modules the
-  pure packages must not import, and asserts `ctypes` is imported nowhere
-  else.
+  seam, `inputs/protocol` (`InputDevice`, `DeviceLostError`) and
+  `outputs/haptic_axes` only; the verified SDL modules are not refactored
+  (shared logic is duplicated within the file limits rather than
+  generalised). `ctypes` is imported only by `inputs/dinput_real.py`,
+  `inputs/dinput_structs.py` and the pre-existing `inputs/sdl_real.py`.
+- The layering test gains `inputs.dinput_real` and `inputs.dinput_structs`
+  to the set of modules the pure packages must not import, and asserts
+  `ctypes` is imported nowhere but those three.
 - Windows-only at runtime: on another OS `--backend dinput8` is a
   configuration error naming the platform. The fake makes the suite pass
   everywhere.
@@ -106,10 +113,21 @@ paths, turns that day from "stop and rewrite" into "switch a flag".
   (`lMagnitude` ±10000); envelope (`DIENVELOPE`) for the transient's
   fade-out.
 - `IDirectInputEffect`: `SetParameters(&DIEFFECT, flags)` with
-  `DIEP_TYPESPECIFICPARAMS | DIEP_DIRECTION | DIEP_DURATION …` and
-  `DIEP_NORESTART` to update a playing effect without restarting it
-  (returns `DI_EFFECTRESTARTED` if the driver restarted anyway);
+  `DIEP_TYPESPECIFICPARAMS | DIEP_DIRECTION | DIEP_DURATION …`. With
+  `DIEP_NORESTART` a driver that cannot update a playing effect in place
+  **fails with `DIERR_EFFECTPLAYING`** and leaves the parameters unchanged;
+  without it the driver may restart and report `DI_EFFECTRESTARTED`.
   `Start(iterations, 0)`; `Stop()`; `Release()`.
+- `SendForceFeedbackCommand` takes one command at a time: `DISFFC_RESET`
+  (invalidates every created effect, so it is sent at open before any
+  `CreateEffect`), then `DISFFC_SETACTUATORSON`; `DISFFC_STOPALL` in
+  `all_off`.
+- `c_dfDIJoystick2` is data in the static import library, not an export of
+  `dinput8.dll`: the `DIDATAFORMAT` for `DIJOYSTATE2` is built by hand in
+  `dinput_structs.py`.
+- `DIPROP_AUTOCENTER` is set to off and `DIPROP_FFGAIN` to 10000 before
+  `Acquire` (as SDL's haptic layer does), then `DIPROP_FFGAIN` is read
+  back for the probe report.
 - `DIERR_INPUTLOST`, `DIERR_NOTACQUIRED`, `DIERR_UNPLUGGED` mean the device
   went away or lost acquisition.
 - A window handle is required for the cooperative level. SDL uses a
@@ -193,6 +211,56 @@ tests/test_dinput_hardware.py  WFE_HARDWARE=1 conformance (skipped)
 - Ctrl+C during `Acquire` or effect creation follows the same
   `_fly`/`_close_unowned` path.
 
+## Builder-check rulings (author's calls, 2026-10-25)
+
+1. **One device object for the base.** SDL2's DirectInput joystick driver
+   opens every DirectInput joystick `DISCL_EXCLUSIVE | DISCL_BACKGROUND`,
+   so a second exclusive acquire of the same base would fail. Under
+   `--backend dinput8` the base is therefore **not opened by SDL at all**:
+   `inputs/dinput_device.py::DInputJoystick` implements `InputDevice`
+   (`poll` = `Poll` + `GetDeviceState(DIJOYSTATE2)`, `axis`, `button`,
+   `alive`, `name`, and `guid` = the profile's SDL GUID string so
+   `device_map` is unchanged) over the acquired device, and
+   `DInputHapticBackend` drives force on that same object. `open_devices`
+   gains a `dinput_base: str | None` alias to open that way; every other
+   alias stays SDL. Axis indices come from the device's axis objects
+   enumerated in `dwOfs` order (`EnumObjects(DIDFT_AXIS)`), which is the
+   order SDL's DirectInput driver numbers them; `list-devices --backend
+   dinput8` prints each axis with its offset name, `DIDOI_FFACTUATOR` flag
+   and live value so the owner can confirm the profile's indices before
+   flying. Pitch and roll must be `FFACTUATOR` axes, else a configuration
+   error naming the axis.
+2. **Update in place, with one tolerated failure.** A changed persistent
+   effect is updated with `SetParameters(... | DIEP_NORESTART)` and **not**
+   started again. `DIERR_EFFECTPLAYING` is the single HRESULT handled rather
+   than raised: the update is retried without `DIEP_NORESTART` (accepting
+   the restart, applying the sine phase carry), the refusal is latched per
+   effect kind so it is tried once, and an INFO line records it. `Start`
+   is called on creation, after `all_off`, and at the half-life re-run
+   (the duration counts from the last `Start`, so the half-life timer is
+   per `Start`, never reset by an in-place update). `dinput_persistent.py`
+   therefore has its own held-effect logic, not a reuse of
+   `PersistentEffects`.
+3. **Auto-centre off, gain full** before `Acquire`, as stated above; the
+   probe reports the read-back gain.
+4. **Probe never starts an effect**, like the SDL probe: it creates each
+   kind with zero coefficients and tests the spring-centre update with
+   `SetParameters(DIEP_TYPESPECIFICPARAMS)` on the never-started spring. It
+   fills the same `PrimitiveReport` fields and uses the same PASS / WARN /
+   FAIL rules; the report also prints the matched instance, the acquire
+   result, the gain and the axis table. The hardware test does the
+   force-bearing checks.
+5. **Device loss** is noticed by the input poll every tick
+   (`DIERR_INPUTLOST` / `DIERR_NOTACQUIRED` / `DIERR_UNPLUGGED` →
+   `DeviceLostError`), so the loop exits `device_lost` within one tick; the
+   force side classifies the same codes on its own calls. No extra
+   per-tick force call.
+6. **No SDL refactor.** `dinput_capabilities.py` builds the same `missing`
+   frozenset with the same warning texts from `EnumEffects`; the existing
+   `refuse_unboosted_without_friction` already takes a frozenset.
+7. **`--refresh-every-tick`** (from the backlog spec) is an SDL option;
+   with `--backend dinput8` it is a usage error.
+
 ## Left to the builder
 
 - The exact ctypes struct layouts and vtable indices (from the DirectInput 8
@@ -206,13 +274,16 @@ tests/test_dinput_hardware.py  WFE_HARDWARE=1 conformance (skipped)
 ## Acceptance
 
 1. Gates green; layering test passes with `ctypes` confined to
-   `dinput_real.py` / `dinput_structs.py`.
+   `dinput_real.py`, `dinput_structs.py` and `sdl_real.py`.
 2. Effect builder tests pin every scale and unit (±10000, µs, phase).
 3. Backend tests against the fake mirror the SDL backend suite: persistent
-   update-on-change and half-life re-run, `DIEP_NORESTART` honoured vs
-   restarted, pools, `all_off` zeroing, `close` release order, device
-   lost, apply after close ignored, capability gating and `unboosted`
-   refusal.
+   update-on-change (no `Start` after an in-place update) and half-life
+   re-run, `DIERR_EFFECTPLAYING` → retry without `DIEP_NORESTART` latched
+   per kind, pools, `all_off` zeroing, `close` release order (effects,
+   `Unacquire`, device, DirectInput, window), device lost from the input
+   poll and from a force call, apply after close ignored, capability gating
+   and `unboosted` refusal; `DInputJoystick` input tests (axis order from
+   enumerated objects, button reads, loss on poll).
 4. Device-matching tests: VID/PID parse, force-feedback preference,
    ambiguity error, no-match error.
 5. CLI tests: `run --backend dinput8` builds the DirectInput backend and
