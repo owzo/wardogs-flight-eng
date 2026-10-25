@@ -4,10 +4,11 @@ Force-feedback synthesiser for Wardogs helicopters.
 
 Wardogs sends no force feedback to any joystick. Flight Eng produces it from
 the only signal it is allowed to read: your own stick, collective and pedals.
-It gives the Littlebird, Lakota and Havoc a centring spring around a trim
-point you set with a button, a rotor buzz through the grip, and weapon recoil,
-through a Moza AB9 or any other DirectInput force-feedback base. It is MIT
-licensed, Windows only, and Python 3.12+.
+It gives the Lakota and Havoc a force-trim spring around a trim point you set
+with a button, the Littlebird a light unboosted stick with a friction clamp,
+and all three friction, damping, inertia, a rotor buzz through the grip and
+weapon recoil, through a Moza AB9 or any other DirectInput force-feedback
+base. It is MIT licensed, Windows only, and Python 3.12+.
 
 > **⚠️ Not yet tested on real hardware.** Every force path in this program
 > has been verified only against a simulated SDL layer. The author's Moza AB9,
@@ -27,20 +28,25 @@ licensed, Windows only, and Python 3.12+.
 
 ## Status
 
-Version 0.1.0 (v1).
+Version 0.2.0.
 
-- **Complete and tested:** the whole engine and the no-hardware path. A
-  scripted scenario drives simulated devices through the engine and writes a
-  force log and a plot (see "Try it without hardware"). The test suite covers
-  the engine, the profile and constants loading, the runtime loop and the CLI.
+- **Complete and tested:** the whole engine and the no-hardware path,
+  including the two feel modes, the friction, damper and inertia conditions
+  and the airspeed estimate (see "Feel modes"). Scripted scenarios drive
+  simulated devices through the engine and write a force log and a plot (see
+  "Try it without hardware"). The test suite covers the engine, the profile
+  and constants loading, the runtime loop and the CLI.
 - **Built but not yet run on an AB9:** the SDL haptic path that talks to a
-  real base. It was written and tested against a fake SDL implementation, and
-  SDL's joystick enumeration works in the packaged `.exe`, but no force has yet
-  been played on a Moza AB9: the owner's base has not arrived. Treat the first
-  run as a tuning session (see "Hardware tuning pass"), keep a hand near the
-  stick, and keep the default `force_ceiling` in the shipped profiles. Do not
-  assume the feel values are right for your base.
-- **Not in v1:** collective or yaw force feedback, a GUI, reading any game
+  real base, the friction, damper and inertia effects among it. It was written
+  and tested against a fake SDL implementation, and SDL's joystick enumeration
+  works in the packaged `.exe`, but no force has yet been played on a Moza
+  AB9: the owner's base has not arrived. Treat the first run as a tuning
+  session (see "Hardware tuning pass"), keep a hand near the stick, and keep
+  the default `force_ceiling` in the shipped profiles. Do not assume the feel
+  values are right for your base.
+- **Changed from 0.1.0:** the profile format. Profiles copied from 0.1.0 must
+  be re-copied; the error says so (see "Feel modes").
+- **Not built:** collective or yaw force feedback, a GUI, reading any game
   state, Linux or macOS.
 
 ## Install
@@ -143,12 +149,12 @@ What the seven buttons do:
 
 | Button | Tap or hold | Effect |
 |---|---|---|
-| `trim_lock` | tap | the spring centre moves to where the stick is now |
-| `trim_reset` | tap | the spring centre returns to origin |
+| `trim_lock` | tap | `force_trim`: the spring centre moves to where the stick is now; `unboosted`: clamps the stick where it is (see "Feel modes") |
+| `trim_reset` | tap | `force_trim`: the spring centre returns to origin; `unboosted`: releases the clamp |
 | `fire` | hold | recoil pulses after the weapon's wind-up (profiles with a pilot weapon) |
 | `reload` | tap | silences recoil for the weapon's reload time |
 | `rotor_toggle` | tap | spools the rotor buzz down, or back up |
-| `profile_cycle` | tap | switches to the next profile given to `run`; forces drop to zero for the switch and a profile flown for the first time starts fresh (rotor buzz from 0, trim centre at origin; see "Run") |
+| `profile_cycle` | tap | switches to the next profile given to `run`; forces drop to zero for the switch, the trim and clamp start fresh and the rotor keeps its spool (see "Run") |
 | `all_off` | tap | latches every force off; tap again to resume |
 
 ### 3. Calibrate
@@ -169,11 +175,20 @@ wardogs-flight-eng check-device
 ```
 
 Opens the first force-feedback device (or `--guid GUID` for a specific one) and
-asks it to create a spring, a moving spring centre, a sine and a constant
-force. Nothing is played, so the stick does not move. It prints one `yes`/`no`
-per primitive and `PASS` or `FAIL`. Note that "accepted" means the driver took
-the request; only flying it, or `tests/test_sdl_hardware.py` (see the tuning
-pass), shows the stick actually moves.
+asks it to create a spring, a moving spring centre, a sine, a constant force,
+and a friction, a damper and an inertia condition. Nothing is played, so the
+stick does not move. It prints one `yes`/`no` per primitive and one verdict:
+
+- `PASS`: every primitive was accepted.
+- `WARN: not accepted: ...` (exit 0): only friction, damper or inertia were
+  refused. The line names them. `force_trim` profiles run without them;
+  `unboosted` profiles cannot run without friction (see "Feel modes").
+- `FAIL: not accepted: ...` (exit 1): the spring, the moving centre, the sine
+  or the constant force was refused.
+
+Note that "accepted" means the driver took the request; only flying it, or
+`tests/test_sdl_hardware.py` (see the tuning pass), shows the stick actually
+moves.
 
 ### 5. Run
 
@@ -192,14 +207,17 @@ wardogs-flight-eng run --profile a.json --profile b.json
 
 Profiles in one run must have an identical `device_map` (`run` names the first
 field that differs), and the strictest `force_ceiling` and the shortest
-`watchdog_s` among them apply to all.
+`watchdog_s` among them apply to all. If any of them is an `unboosted`
+profile and the base reports no friction primitive, `run` refuses to start
+(exit 1) and names the profile and the remedy (see "Feel modes").
 
-Each profile keeps its own engine, and a switch carries nothing over but the
-`all_off` latch and which buttons are held. The first time you switch to a
-profile its engine starts fresh: the rotor buzz spools up from 0 and the
-trim centre is at origin (tap `trim_lock` again to re-trim). Switching back
-to a profile you already flew resumes it as you left it, including its trim
-centre and rotor speed at the moment you switched away.
+Every switch hands over the same way, whether or not you flew that profile
+before. The incoming profile starts with its trim centre at origin, its clamp
+released, its airspeed estimate at 0 and its weapon fresh (no wind-up, no
+reload in progress); tap `trim_lock` again to re-trim. The rotor keeps its
+spool: the incoming rotor runs at the same fraction of its own operating
+speed as the outgoing one, and a rotor spooled down stays down. The `all_off`
+latch and which buttons are held carry over.
 
 **Stopping.** Press Ctrl+C once: the loop finishes its tick, zeroes every
 force and releases the base, and prints `stopped: ...`. Further presses within
@@ -232,13 +250,32 @@ the paths of two files, written to `--out DIR` or by default to
 `%LOCALAPPDATA%\WardogsFlightEng\dry-runs\<timestamp>\`:
 
 - `forces.jsonl`: every command the engine issued, one JSON object per line.
-- `forces.html`: a self-contained page (no scripts) with a pitch row and a roll
-  row on a shared time axis in seconds. Each row shows the spring centre and
-  the rotor sine magnitude as lines, recoil pulses as ticks above or below the
-  zero line (the sign is the push direction), shake transients as short bars
-  whose length is their duration, and any `all_off` as a red band across both
-  rows. You should see the spring centre step at the trim lock and return at
-  the reset.
+- `forces.html`: a self-contained page (no scripts) with four rows on a
+  shared time axis in seconds. The pitch and roll rows show the spring centre
+  and the rotor sine magnitude as lines, recoil pulses as ticks above or below
+  the zero line (the sign is the push direction), and shake transients as
+  short bars whose length is their duration. The pitch gains and roll gains
+  rows show the spring, friction, damper and inertia coefficients as lines.
+  Any `all_off` is a red band across every row.
+
+The shipped Littlebird is `unboosted`, so with this scenario its spring
+centre stays at origin and the trim lock shows instead in the gains rows:
+the clamp engages at the lock and releases at the reset. With
+`src/wardogs_flight_eng/profiles/lakota.json` (`force_trim`) you should see
+the spring centre move to the stick at the trim lock and return at the reset,
+under constant friction, damper and inertia.
+
+A second scenario exercises the clamp and the airspeed estimate:
+
+```
+wardogs-flight-eng dry-run --profile src/wardogs_flight_eng/profiles/littlebird-miniguns.json --scenario tests/scenarios/littlebird-clamp-cruise.json
+```
+
+It lifts at 1 s, pushes the stick forward and holds it from 4 s (the
+airspeed estimate rises and the buzz grows), clamps at 10 s, releases at
+14 s and returns the stick to centre at 15 s. In the gains rows, friction
+rises to `clamp_friction` and the spring falls to 0 over `trim_slew_s` after
+the clamp, and both return after the release.
 
 ## Moza Cockpit companion settings
 
@@ -251,28 +288,124 @@ profile sets `feel.spring_coefficient` to 0 and supplies only buzz and recoil).
 Pick one, and never run two springs at once: the stick would be pulled to a
 point between the two centres and trim lock would break.
 
+Those divisions were written for 0.1.0. Since 0.2.0 Flight Eng also plays
+friction, damper and inertia (see "Feel modes"), so under **A** Cockpit's own
+damper, friction and inertia act alongside Flight Eng's; how the base
+combines the two has not been measured. Under **B**, `spring_coefficient` 0
+forces `feel.friction` to 0 too (it may be at most a quarter of the spring),
+and Flight Eng supplies buzz, recoil, damper and inertia, plus the clamp's
+friction in an `unboosted` profile.
+
 ## What the forces are and where the numbers come from
 
-Four effects, per airframe, all set in the profile JSON:
+Five effects, per airframe, all set in the profile JSON:
 
-1. **Feel spring.** A centring spring on pitch and roll around the trim point
-   (the roll spring is `spring_coefficient * roll_scale`), with a deadband.
-2. **Trim.** `trim_lock` and `trim_reset` move the spring centre, slewed over
-   `trim_slew_s`. Nothing else ever moves it: the stick never wanders.
-3. **Rotor buzz.** A sine at the airframe's main-rotor frequency on both axes,
-   scaled by the collective position and a little by cyclic deflection, with a
+1. **Feel spring.** A centring spring on pitch and roll (the roll spring is
+   `spring_coefficient * roll_scale`), with a deadband. Its centre is the
+   trim point in `force_trim` mode and the mechanical centre in `unboosted`
+   mode (see "Feel modes").
+2. **Friction, damper and inertia.** Three condition effects on pitch and
+   roll. Friction (`feel.friction`) resists any motion with a constant
+   force; it is the breakout, the force needed to start the stick moving.
+   The damper (`feel.damper`) resists speed and the inertia (`feel.inertia`)
+   resists acceleration. Roll friction is `friction * roll_scale`; the damper
+   and inertia are the same on both axes.
+3. **Trim.** `trim_lock` and `trim_reset` move the spring centre
+   (`force_trim`) or engage and release a friction clamp (`unboosted`), in
+   both cases slewed over `trim_slew_s` so the force never steps. Nothing
+   else ever moves the spring centre: the stick never wanders.
+4. **Rotor buzz.** A sine at the airframe's main-rotor frequency on both axes,
+   scaled by the collective position, a little by cyclic deflection and by
+   the airspeed estimate (`1 + rotor.airspeed_factor * airspeed`), with a
    spool-up when the program starts.
-4. **Weapon recoil.** While `fire` is held, after the weapon's wind-up, one
+5. **Weapon recoil.** While `fire` is held, after the weapon's wind-up, one
    force pulse per round at the weapon's fire rate, stepping through the game's
    recoil pattern (or a fixed rearward kick for rockets), plus the weapon's
    shake. One pilot weapon per profile; the `havoc` profile has none.
+
+### Feel modes
+
+`feel.mode` picks how the stick feels. The shapes (breakout a fraction of
+the spring, roll lighter than pitch, a damped stick that does not ring)
+follow `docs/reference/real-cyclic-feel-references.md`, which summarises the
+FAA Helicopter Flying Handbook, ADS-33E-PRF and a NASA force-feel study. Only
+ratios and shapes are taken from it, never a number. The values in `feel`,
+the buzz gains and the estimator's `forward_threshold` and `tau_s` are owner
+taste, listed in each profile's `taste` field.
+
+**`force_trim`** (the Lakota and Havoc, which copy hydraulically boosted
+helicopters with force trim). The spring pulls toward a trim anchor that
+`trim_lock` moves to the stick and `trim_reset` returns to origin. Friction
+is constant and acts as the breakout. Damper and inertia are constant.
+
+**`unboosted`** (the Littlebird, which copies a light helicopter whose stick
+is linked straight to the rotor). A weak spring pulls toward the mechanical
+centre, against light friction, so a released stick eases back toward
+centre. `trim_lock` engages a clamp: over `trim_slew_s` the spring fades to
+0 while friction rises to `feel.clamp_friction`, so the stick holds wherever
+you leave it and re-holds if you push it somewhere else. `trim_reset`
+releases the clamp the same way. A lock while clamped, or a reset while
+free, does nothing. Damper and inertia are constant.
+
+**The stopping band.** Friction has no centre: it resists motion
+everywhere. A released stick therefore stops wherever the spring's pull has
+fallen to the friction level, which is anywhere within
+`friction / spring_coefficient` of travel from the spring's centre (the
+mechanical centre, or the trim anchor). The loader refuses a profile whose
+`feel.friction` is more than `spring_coefficient / 4`, so the band is never
+wider than a quarter of the travel; the shipped profiles keep it to a fifth
+or less. That is why the Littlebird's free friction is small and the clamp
+supplies the hold. Raising `feel.damper` never narrows the band; it only
+stops the stick overshooting.
+
+**Rules the loader enforces.** `feel.mode` is `force_trim` or `unboosted`.
+`feel.clamp_friction` is required in `unboosted` mode, rejected in
+`force_trim` mode, and must be at least `feel.friction`; it is exempt from
+the quarter rule, because a fully clamped stick has no spring. `friction`,
+`clamp_friction`, `damper`, `inertia` and the other gains must each be at
+or below `safety.force_ceiling`.
+
+**The airspeed estimate.** Real light-helicopter sticks carry more rotor in
+the hand at speed, so the rotor buzz grows with an airspeed estimate (item 4
+above). The Littlebird ships a large `rotor.airspeed_factor`; the boosted
+Lakota and Havoc, whose real counterparts pass little of this to the hand,
+ship a small one. The profile's `estimator` block says where the estimate comes from:
+
+```json
+"estimator": {"kind": "input", "forward_threshold": 0.15, "tau_s": 4.0}
+```
+
+Today the only kind is `input`: sustained forward stick. Forward stick
+beyond `forward_threshold` sets a target airspeed between 0 and 1, and the
+estimate follows it with the time constant `tau_s` in seconds (0 follows at
+once); stick at or behind `forward_threshold`, aft stick included, brings it
+back toward 0. The `kind` field is where a future game-state feed would plug
+in. Nothing reads the game: the estimate comes only from your own stick.
+
+**When the base lacks a condition.** At start, `run` asks the base which of
+friction, damper and inertia it supports. A missing damper or inertia (or,
+in a `force_trim` profile, a missing friction) is dropped and logged once as
+a WARNING; the rest of the feel runs without it. A base without friction,
+or one that reports no capabilities at all, cannot hold an `unboosted`
+clamp, so `run` refuses to start any `unboosted` profile on it (exit 1) and
+says to set that profile's `feel.mode` to `force_trim` or use a base with
+friction. `check-device` shows the same support up front (see "First run").
+
+**Profiles from 0.1.0.** The profile format changed in 0.2.0: `feel.mode`,
+`feel.friction`, `feel.damper`, `feel.inertia`, `rotor.airspeed_factor` and
+the `estimator` block are required, with no defaults. Profiles copied from
+0.1.0 must be re-copied; the error says so. It lists the missing fields and
+tells you to copy the shipped profile for that airframe, fill `device_map`
+again and re-run `calibrate`.
+
+### Where the numbers come from
 
 **Game data with provenance.** Rotor speeds, fire rates, wind-ups, reload times
 and shake envelopes are game facts and live only in
 `src/wardogs_flight_eng/data/wardogs_heli_constants.json`, with the Steam build
 id, extraction date and asset names recorded. Stiffnesses, amplitudes and
 ceilings are the owner's taste, listed in each profile's `taste` field, and are
-never presented as game data. Nothing is guessed from real aircraft.
+never presented as game data. No game value is guessed from real aircraft.
 
 ```
 wardogs-flight-eng show-constants
@@ -350,6 +483,13 @@ print(result)  # LoopResult(ticks=100, stopped_by='max_ticks', ...)
 force commands. A force backend is any object implementing the `ForceBackend`
 protocol (`wardogs_flight_eng.outputs.protocol`), and an input device any
 object implementing `InputDevice` (`wardogs_flight_eng.inputs.protocol`).
+`FlightEngine(profile, constants, estimator=...)` takes any object
+implementing `StateEstimator` (`wardogs_flight_eng.engine.flight_state`) in
+place of the one the profile's `estimator` block builds: this is the seam a
+future game-state feed, or a test stub, plugs into. Its `step(dt, frame,
+deflection)` returns the tick's `FlightState` (airspeed, collective and
+deflection, each 0..1) and `restart()` returns it to rest on a profile
+switch.
 
 ## Hardware tuning pass
 
@@ -387,7 +527,18 @@ code task.
 5. Unplug the base mid-run: expect `stopped: device_lost`, exit code 2 and no
    residual force when it is plugged back in. If it still pushes,
    power-cycle it and open an issue.
-6. Commit the tuned profiles.
+6. **Clamp hold** (`unboosted` profiles). Fly with the stick off centre,
+   tap `trim_lock` to clamp, and let go. Over 10 s the stick must not creep:
+   ADS-33E-PRF §3.6.6 allows no slippage of the trim position. If it creeps,
+   raise `feel.clamp_friction` until it holds, keeping it at or below
+   `safety.force_ceiling`.
+7. **Release settle.** Tap `trim_reset` (in an `unboosted` profile this
+   releases the clamp) and let go. The stick must come back to within the
+   stopping band, `friction / spring_coefficient` of travel from the centre,
+   and stop there without overshoot (see "Feel modes"). If it stops short,
+   lower `feel.friction` or raise `feel.spring_coefficient`. If it
+   overshoots or oscillates, raise `feel.damper`.
+8. Commit the tuned profiles.
 
 ## Licence
 
