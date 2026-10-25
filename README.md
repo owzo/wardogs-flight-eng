@@ -356,10 +356,13 @@ free, does nothing. Damper and inertia are constant.
 `trim_lock` button acts. `tap` is the 0.2.0 behaviour described above: each
 press locks. In `hold`, the button acts while it is held. In `force_trim`
 mode, holding it lets the spring go slack (it fades to 0 over
-`trim_slew_s`; the anchor stays put), and letting go anchors the spring
-where the stick is at that instant and stiffens it back over `trim_slew_s`;
-a release part-way through picks up from where the fade had got to.
-`trim_reset` still returns the anchor to origin. In `unboosted` mode the
+`trim_slew_s`; the anchor stays put). Letting go sets the anchor where the
+stick is at that instant, at once, like a real force-trim brake, and the
+spring stiffens back about it over `trim_slew_s`, so the stick is not pulled
+anywhere; a release part-way through picks up from where the fade had got
+to. `trim_reset` still returns the anchor to origin, but a reset made while
+`trim_lock` is held is overwritten by the anchor set on release. In
+`unboosted` mode the
 clamp is momentary: engaged while the button is held, released when you let
 go, each over `trim_slew_s`; `trim_reset` does nothing, since nothing stays
 latched. A `trim_lock` held through a profile switch is ignored until you

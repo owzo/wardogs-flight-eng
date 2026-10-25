@@ -9,9 +9,10 @@ fixed rate of ``1 / trim_slew_s`` per second from wherever it is, unlike
 
 In the ``hold`` trim style ``hold`` is called every tick with the button
 level instead of ``lock``: force_trim slackens the spring toward 0 while held
-(the anchor stays) and on release anchors at the stick and re-stiffens, both
-through a blend at the same fixed rate; unboosted clamps only while held and
-``reset`` does nothing, since nothing is latched.
+(the anchor stays); on release the anchor is placed at the stick at once and
+the spring re-stiffens from its current slack at the fixed blend rate.
+unboosted clamps only while held and ``reset`` does nothing, since nothing is
+latched.
 """
 
 from wardogs_flight_eng.engine.commands import (
@@ -100,9 +101,9 @@ class FeelModel:
     def hold(self, pressed: bool, pitch: float, roll: float) -> None:
         """Hold-style trim with the button level: slack or clamp while pressed.
 
-        force_trim: on the pressed-to-released edge the anchor moves to the
-        stick ``(pitch, roll)`` as the spring re-stiffens. unboosted: the stick
-        position is unused.
+        force_trim: on the pressed-to-released edge the anchor is placed at
+        the stick ``(pitch, roll)`` with no slew, then the spring re-stiffens.
+        unboosted: the stick position is unused.
         """
         released = self._held and not pressed
         self._held = pressed
@@ -112,7 +113,7 @@ class FeelModel:
             return
         self._slack.retarget(target)
         if released:
-            self._trim.lock(pitch, roll)
+            self._trim.place(pitch, roll)
 
     def reset(self) -> None:
         """Trim-reset: anchor to origin (force_trim) or free the stick (unboosted).

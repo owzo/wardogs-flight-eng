@@ -2,8 +2,9 @@
 
 A trim-lock tap captures the stick position as the new centre and a trim-reset
 tap returns it to origin. The centre slews linearly toward the requested
-target so the stick never snaps; nothing but ``lock`` and ``reset`` ever
-changes the target.
+target so the stick never snaps. ``place`` sets the centre at once, for a
+hold-style release where the spring is slack and fades back in; nothing but
+``lock``, ``reset`` and ``place`` ever changes the target.
 """
 
 _UNIT_LIMIT = 1.0
@@ -63,6 +64,12 @@ class TrimState:
     def reset(self) -> None:
         """Slew back to the origin."""
         self._retarget(0.0, 0.0)
+
+    def place(self, pitch: float, roll: float) -> None:
+        """Set the centre to the clamped stick position at once, with no slew."""
+        self._pitch = _clamp_unit(pitch)
+        self._roll = _clamp_unit(roll)
+        self._retarget(self._pitch, self._roll)
 
     def step(self, dt: float) -> None:
         """Advance the current move by ``dt`` seconds (negative counts as zero).

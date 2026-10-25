@@ -32,9 +32,15 @@ def test_force_trim_release_anchors_at_the_stick_and_restiffens() -> None:
     f.hold(True, 0.0, 0.0)
     f.step(0.3)
     f.hold(False, 0.4, -0.2)
-    f.step(0.3)
     springs = [c for c in f.conditions() if isinstance(c, SpringCommand)]
-    assert [s.center for s in springs] == pytest.approx([0.4, -0.2])
+    assert [s.center for s in springs] == [0.4, -0.2]  # placed, no slew
+    assert [s.coefficient for s in springs] == [0.0, 0.0]  # still slack
+    f.step(0.15)
+    assert pitch_spring(f.conditions()) == pytest.approx(0.25)
+    assert (f.center_pitch, f.center_roll) == (0.4, -0.2)
+    f.step(0.15)
+    springs = [c for c in f.conditions() if isinstance(c, SpringCommand)]
+    assert [s.center for s in springs] == [0.4, -0.2]
     assert [s.coefficient for s in springs] == [0.5, 0.25]
 
 

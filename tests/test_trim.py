@@ -29,3 +29,17 @@ def test_nothing_but_lock_and_reset_moves_center() -> None:
     t = TrimState(slew_s=0)
     t.step(5.0)
     assert (t.center_pitch, t.center_roll) == (0.0, 0.0)
+
+
+def test_place_snaps_the_centre_mid_slew_and_a_later_lock_starts_from_it() -> None:
+    t = TrimState(slew_s=0.5)
+    t.lock(0.5, 0.5)
+    t.step(0.25)
+    t.place(1.7, -0.3)
+    assert (t.center_pitch, t.center_roll) == (1.0, -0.3)  # clamped, no step
+    t.step(1.0)
+    assert (t.center_pitch, t.center_roll) == (1.0, -0.3)  # the old move is gone
+    t.lock(0.0, 0.0)
+    t.step(0.25)
+    assert t.center_pitch == pytest.approx(0.5)
+    assert t.center_roll == pytest.approx(-0.15)

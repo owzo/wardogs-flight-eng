@@ -142,3 +142,16 @@ def test_hold_style_unboosted_engine_clamps_only_while_held() -> None:
     for _ in range(40):
         cmds = lb.step(0.01, frame())
     assert pitch_friction(cmds) == 0.02
+
+
+def test_hold_style_force_trim_release_places_the_anchor_at_the_stick() -> None:
+    lak = hold_engine("lakota")
+    for _ in range(40):
+        cmds = lak.step(0.01, frame(0, 0, 0, 0, Button.TRIM_LOCK))
+    assert pitch_spring(cmds).coefficient == 0.0
+    cmds = lak.step(0.01, frame(0.4, -0.2))  # released here
+    assert pitch_spring(cmds).center == 0.4  # placed on the release tick
+    assert pitch_spring(cmds).coefficient < 0.5
+    for _ in range(40):
+        cmds = lak.step(0.01, frame(0.4, -0.2))
+    assert (pitch_spring(cmds).center, pitch_spring(cmds).coefficient) == (0.4, 0.5)
