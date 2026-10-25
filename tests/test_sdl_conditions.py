@@ -23,6 +23,7 @@ from wardogs_flight_eng.engine.commands import (
     InertiaCommand,
     SpringCommand,
 )
+from wardogs_flight_eng.outputs.haptic_axes import HapticAxis, HapticAxisMap
 from wardogs_flight_eng.outputs.sdl_conditions import condition_effect
 
 
@@ -40,21 +41,30 @@ def test_spring_condition_acts_on_its_axis_only() -> None:
 @pytest.mark.parametrize(
     ("command", "kind", "coeff"),
     [
-        (FrictionCommand(Axis.PITCH, 0.1), "SDL_HAPTIC_FRICTION", 3277),
-        (DamperCommand(Axis.ROLL, 0.25), "SDL_HAPTIC_DAMPER", 8192),
-        (InertiaCommand(Axis.PITCH, 0.08), "SDL_HAPTIC_INERTIA", 2621),
+        (FrictionCommand(Axis.PITCH, 0.1), FakeSdl.SDL_HAPTIC_FRICTION, 3277),
+        (DamperCommand(Axis.ROLL, 0.25), FakeSdl.SDL_HAPTIC_DAMPER, 8192),
+        (InertiaCommand(Axis.PITCH, 0.08), FakeSdl.SDL_HAPTIC_INERTIA, 2621),
     ],
 )
 def test_condition_effect_shape(
-    command: ConditionCommand, kind: str, coeff: int
+    command: ConditionCommand, kind: int, coeff: int
 ) -> None:
     fake = FakeSdl(stick())
     effect = condition_effect(fake, STANDARD_AXES, command, 1000)
-    assert effect.type == getattr(fake, kind)
+    assert effect.type == kind
     on = (0, coeff, 0) if command.axis is Axis.PITCH else (coeff, 0, 0)
     assert effect.condition.right_coeff == effect.condition.left_coeff == on
     assert effect.condition.center == effect.condition.deadband == (0, 0, 0)
     assert effect.condition.length == 1000
+
+
+def test_inverted_binding_moves_the_axis_but_leaves_the_coefficient_unsigned() -> None:
+    swapped = HapticAxisMap(pitch=HapticAxis(1, -1.0), roll=HapticAxis(0, 1.0))
+    effect = condition_effect(
+        FakeSdl(stick()), swapped, FrictionCommand(Axis.PITCH, 0.1), 1000
+    )
+    assert effect.condition.right_coeff == effect.condition.left_coeff == (0, 3277, 0)
+    assert effect.condition.center == (0, 0, 0)
 
 
 def test_conditions_are_persistent_and_updated_only_on_change() -> None:

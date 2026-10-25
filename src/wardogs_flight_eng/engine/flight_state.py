@@ -52,7 +52,7 @@ class InputEstimator:
             raise ValueError(
                 f"forward_threshold must be >= 0 and < 1, got {forward_threshold}"
             )
-        if tau_s < 0:
+        if not tau_s >= 0:
             raise ValueError(f"tau_s must be >= 0, got {tau_s}")
         self._forward_threshold = forward_threshold
         self._tau_s = tau_s

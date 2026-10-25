@@ -26,12 +26,18 @@ def test_partial_forward_targets_the_scaled_value() -> None:
     assert e.step(0.01, frame(pitch=0.5), 0.0).airspeed == pytest.approx(0.35 / 0.85)
 
 
-def test_aft_and_below_threshold_decay_to_zero() -> None:
+def test_aft_stick_snaps_to_zero_with_tau_zero() -> None:
     e = InputEstimator(0.15, 0.0)
     e.step(0.01, frame(pitch=1.0), 0.0)
     assert e.step(0.01, frame(pitch=0.1), 0.0).airspeed == 0.0
     e.step(0.01, frame(pitch=1.0), 0.0)
     assert e.step(0.01, frame(pitch=-1.0), 0.0).airspeed == 0.0
+
+
+def test_pitch_at_threshold_targets_zero() -> None:
+    e = InputEstimator(0.15, 0.0)
+    e.step(0.01, frame(pitch=1.0), 0.0)
+    assert e.step(0.01, frame(pitch=0.15), 0.0).airspeed == 0.0
 
 
 def test_state_carries_collective_and_deflection_and_zero_dt_holds() -> None:
@@ -69,3 +75,5 @@ def test_rejects_threshold_of_one_and_negative_tau() -> None:
         InputEstimator(-0.1, 1.0)
     with pytest.raises(ValueError, match="tau_s"):
         InputEstimator(0.1, -1.0)
+    with pytest.raises(ValueError, match="tau_s"):
+        InputEstimator(0.1, float("nan"))

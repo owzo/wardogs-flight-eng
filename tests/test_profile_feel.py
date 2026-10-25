@@ -33,6 +33,38 @@ def test_shipped_profiles_carry_the_decided_feel() -> None:
     assert {"friction", "damper", "inertia", "airspeed_factor"} <= set(havoc.taste)
 
 
+def test_shipped_littlebird_rockets_and_lakota_carry_the_decided_feel() -> None:
+    rockets = load_profile(PROFILES / "littlebird-rockets.json")
+    assert (
+        rockets.feel.mode,
+        rockets.feel.spring_coefficient,
+        rockets.feel.friction,
+        rockets.feel.clamp_friction,
+        rockets.feel.damper,
+        rockets.feel.inertia,
+        rockets.rotor.airspeed_factor,
+    ) == ("unboosted", 0.12, 0.02, 0.5, 0.15, 0.05, 0.6)
+    lakota = load_profile(PROFILES / "lakota.json")
+    assert (
+        lakota.feel.mode,
+        lakota.feel.spring_coefficient,
+        lakota.feel.friction,
+        lakota.feel.clamp_friction,
+        lakota.feel.damper,
+        lakota.feel.inertia,
+        lakota.rotor.airspeed_factor,
+    ) == ("force_trim", 0.5, 0.1, None, 0.25, 0.08, 0.15)
+    assert lakota.estimator == Estimator(
+        kind="input", forward_threshold=0.15, tau_s=4.0
+    )
+
+
+def test_friction_exactly_a_quarter_of_the_spring_is_accepted() -> None:
+    raw = raw_profile("lakota")
+    raw["feel"]["friction"] = raw["feel"]["spring_coefficient"] / 4
+    assert Profile.from_document(raw).feel.friction == 0.125
+
+
 def test_v0_1_0_profile_fails_with_migration_hint() -> None:
     with pytest.raises(ProfileError, match="feel.mode.*predates 0.2.0.*calibrate"):
         load_profile(Path(__file__).parent / "fixtures" / "littlebird-v0.1.0.json")

@@ -113,6 +113,8 @@ def test_take_over_copies_spool_fraction_into_this_rotor_speed() -> None:
     assert (r.rpm, r.running, r.spool_fraction) == (125.0, False, 0.5)
     r.take_over(1.7, running=True)
     assert r.rpm == 250.0
+    r.take_over(-0.5, running=True)
+    assert r.rpm == 0.0
 
 
 def test_rejects_negative_airspeed_factor() -> None:

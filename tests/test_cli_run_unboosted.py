@@ -35,6 +35,14 @@ LEGACY = (
 )
 
 
+class HapticOpenFails(TickingSdl):
+    """A base that reports haptics but whose haptic device will not open."""
+
+    def SDL_HapticOpenFromJoystick(self, joystick: object) -> object | None:
+        super().SDL_HapticOpenFromJoystick(joystick)
+        return None
+
+
 def bound_lakota(tmp_path: Path) -> Path:
     doc = json.loads((PROFILES_DIR / "lakota.json").read_text(encoding="utf-8"))
     doc["device_map"] = copy.deepcopy(BOUND_MAP)
@@ -57,7 +65,18 @@ def test_run_refuses_unboosted_profile_when_query_is_zero(profile: Path) -> None
     fake.query_result = 0
     result = invoke(["run", "--profile", str(profile)], api=fake)
     assert result.code == 1 and "unboosted" in result.output
+    assert fake.count("SDL_HapticOpenFromJoystick") == 1
+    assert fake.count("SDL_HapticClose") == 1 and joysticks_released(fake)
+    assert fake.count("SDL_HapticNewEffect") == 0
     assert fake.count("SDL_HapticRunEffect") == 0
+
+
+def test_run_exits_2_and_releases_when_the_haptic_open_fails(profile: Path) -> None:
+    fake = HapticOpenFails(stick(), pedals(), after=200, then=detach_all)
+    result = invoke(["run", "--profile", str(profile)], api=fake)
+    assert result.code == 2
+    assert fake.count("SDL_HapticOpenFromJoystick") == 1
+    assert fake.count("SDL_HapticNewEffect") == 0 and joysticks_released(fake)
 
 
 def test_run_allows_force_trim_profile_without_friction(tmp_path: Path) -> None:

@@ -281,20 +281,21 @@ the clamp, and both return after the release.
 
 If you use a Moza base, Moza Cockpit and Flight Eng must not both drive the
 spring. `docs/reference/community-ffb-references.md` lays out the two valid
-divisions of labour: **A** (Flight Eng owns spring and trim; Cockpit keeps
-damper, friction, inertia and breakout, with its `bacic_spring` and hardware
-balancing at 0/off) or **B** (Cockpit owns spring and hardware trim; Flight Eng
-profile sets `feel.spring_coefficient` to 0 and supplies only buzz and recoil).
+divisions of labour: **A** (Flight Eng owns spring and trim; Cockpit's
+damper, friction and inertia are set low or 0, with its `bacic_spring` and
+hardware balancing at 0/off) or **B** (Cockpit owns spring and hardware trim;
+Flight Eng profile sets `feel.spring_coefficient` to 0 and supplies damper,
+inertia, buzz and recoil).
 Pick one, and never run two springs at once: the stick would be pulled to a
 point between the two centres and trim lock would break.
 
-Those divisions were written for 0.1.0. Since 0.2.0 Flight Eng also plays
-friction, damper and inertia (see "Feel modes"), so under **A** Cockpit's own
-damper, friction and inertia act alongside Flight Eng's; how the base
-combines the two has not been measured. Under **B**, `spring_coefficient` 0
-forces `feel.friction` to 0 too (it may be at most a quarter of the spring),
-and Flight Eng supplies buzz, recoil, damper and inertia, plus the clamp's
-friction in an `unboosted` profile.
+Since 0.2.0 Flight Eng also plays friction, damper and inertia (see "Feel
+modes"), so under **A** any damper, friction or inertia left in Cockpit acts
+alongside Flight Eng's; how the base combines the two has not been measured.
+Under **B**,
+`spring_coefficient` 0 forces `feel.friction` to 0 too (it may be at most a
+quarter of the spring), and Flight Eng supplies buzz, recoil, damper and
+inertia, plus the clamp's friction in an `unboosted` profile.
 
 ## What the forces are and where the numbers come from
 

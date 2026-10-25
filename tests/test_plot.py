@@ -38,7 +38,7 @@ def _small_log(tmp_path: Path) -> Path:
     return _write_log(tmp_path / "forces.jsonl", rows)
 
 
-def test_plot_has_one_row_per_axis(tmp_path: Path) -> None:
+def test_plot_has_four_rows(tmp_path: Path) -> None:
     scenario = Scenario.load(SCENARIOS / "takeoff-trim-fire.json")
     _, plot = dry_run(
         profile("littlebird-miniguns"), load_constants(), scenario, tmp_path
@@ -79,11 +79,13 @@ def test_plot_labels_the_time_axis_in_seconds(tmp_path: Path) -> None:
     assert 'class="tick-label"' in html
 
 
-def test_plot_of_an_empty_log_still_has_both_rows(tmp_path: Path) -> None:
+def test_plot_of_an_empty_log_still_has_every_row(tmp_path: Path) -> None:
     log = _write_log(tmp_path / "empty.jsonl", [])
     out = tmp_path / "plot.html"
     write_plot_html(log, out)
-    assert out.read_text(encoding="utf-8").count('class="axis-row"') == 2
+    html = out.read_text(encoding="utf-8")
+    assert html.count('class="axis-row"') == 2
+    assert html.count('class="gain-row"') == 2
 
 
 def test_plot_draws_gain_lines_for_each_condition(tmp_path: Path) -> None:

@@ -38,7 +38,15 @@ def test_check_device_reports_conditions_and_warns_when_only_they_are_missing() 
         | FakeSdl.SDL_HAPTIC_SPRING,
     )
     result = invoke(["check-device"], api=legacy)
-    assert result.code == 0 and "WARN" in result.output and "friction" in result.output
+    assert result.code == 0
+    assert (
+        "WARN: not accepted: friction, damper, inertia "
+        f"({cli_devices.CONDITION_WARNING})" in result.output
+    )
+    assert cli_devices.CONDITION_WARNING == (
+        "unboosted profiles cannot run without friction; "
+        "force_trim profiles run without the missing conditions"
+    )
     full = invoke(["check-device"], api=FakeSdl(stick()))
     assert full.code == 0 and "PASS" in full.output and "inertia" in full.output
 
