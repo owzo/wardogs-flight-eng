@@ -9,6 +9,7 @@ everywhere; the adapter smoke test needs Windows but no device.
 import ctypes
 import struct
 import sys
+import types
 
 import pytest
 
@@ -27,6 +28,7 @@ from wardogs_flight_eng.inputs.dinput_format import (
     JoystickFormat,
     parameter_flags,
 )
+from wardogs_flight_eng.inputs.dinput_real_root import collector
 
 WINDOWS = sys.platform == "win32"
 windows64 = pytest.mark.skipif(
@@ -108,15 +110,8 @@ def test_condition_effect_converts_to_a_dieffect() -> None:
 
 
 def test_sine_with_envelope_and_constant_convert() -> None:
-    sine = DiEffect(
-        "sine",
-        (4,),
-        (1,),
-        500_000,
-        10000,
-        periodic=DiPeriodic(2000, 0, 9000, 200_000),
-        envelope=DiEnvelope(10000, 0, 0, 100_000),
-    )
+    wave, fade = DiPeriodic(2000, 0, 9000, 200_000), DiEnvelope(10000, 0, 0, 100_000)
+    sine = DiEffect("sine", (4,), (1,), 500_000, 10000, periodic=wave, envelope=fade)
     built = EffectStruct(sine)  # owns the buffers the struct points into
     s = built.struct
     periodic = ctypes.cast(s.lpvTypeSpecificParams, ctypes.POINTER(ds.DIPERIODIC))
@@ -125,7 +120,7 @@ def test_sine_with_envelope_and_constant_convert() -> None:
     assert s.lpEnvelope.contents.dwFadeTime == 100_000
     assert s.lpEnvelope.contents.dwSize == ctypes.sizeof(ds.DIENVELOPE)
     push = DiEffect("constant", (0,), (1,), 200_000, 10000, constant=DiConstant(-3000))
-    pushed = EffectStruct(push)
+    pushed = EffectStruct(push)  # kept alive: c points into its buffers
     c = pushed.struct
     constant = ctypes.cast(c.lpvTypeSpecificParams, ctypes.POINTER(ds.DICONSTANTFORCE))
     assert constant[0].lMagnitude == -3000
@@ -133,32 +128,49 @@ def test_sine_with_envelope_and_constant_convert() -> None:
 
 
 def test_negative_unsigned_fields_clamp_to_zero() -> None:
-    sine = DiEffect("sine", (0,), (1,), -5, -1, periodic=DiPeriodic(-2000, 0, 0, 1))
+    sine = DiEffect("sine", (0,), (1,), -5, -1, periodic=DiPeriodic(-2000, 0, 0, -1))
     built = EffectStruct(sine)
     s = built.struct
     periodic = ctypes.cast(s.lpvTypeSpecificParams, ctypes.POINTER(ds.DIPERIODIC))
     assert (s.dwDuration, s.dwGain, periodic[0].dwMagnitude) == (0, 0, 0)
+    assert periodic[0].dwPeriod == 0
 
 
-def test_parameter_flags_never_start() -> None:
+def test_parameter_flags_always_carry_the_envelope_and_never_start() -> None:
     base = dg.DIEP_DURATION | dg.DIEP_GAIN | dg.DIEP_DIRECTION
-    base |= dg.DIEP_TYPESPECIFICPARAMS
+    base |= dg.DIEP_TYPESPECIFICPARAMS | dg.DIEP_ENVELOPE
     plain = DiEffect("constant", (0,), (1,), 1, 1, constant=DiConstant(1))
-    faded = DiEffect(
-        "sine",
-        (0,),
-        (1,),
-        1,
-        1,
-        periodic=DiPeriodic(1, 0, 0, 1),
-        envelope=DiEnvelope(1, 0, 0, 1),
-    )
-    assert parameter_flags(plain, norestart=False) == base
-    assert parameter_flags(plain, norestart=True) == base | dg.DIEP_NORESTART
-    assert parameter_flags(faded, norestart=False) == base | dg.DIEP_ENVELOPE
+    unit, fade = DiPeriodic(1, 0, 0, 1), DiEnvelope(1, 0, 0, 1)
+    faded = DiEffect("sine", (0,), (1,), 1, 1, periodic=unit, envelope=fade)
     for effect in (plain, faded):
+        assert parameter_flags(effect, norestart=False) == base
+        assert parameter_flags(effect, norestart=True) == base | dg.DIEP_NORESTART
         for norestart in (False, True):
             assert not parameter_flags(effect, norestart) & dg.DIEP_START
+
+
+def test_an_envelope_less_update_sends_a_null_envelope() -> None:
+    """A pooled slot that last carried a fade must lose it on a fade-less update."""
+    sine = DiEffect("sine", (0,), (1,), 1, 1, periodic=DiPeriodic(1, 0, 0, 1))
+    built = EffectStruct(sine)
+    assert parameter_flags(sine, norestart=False) & dg.DIEP_ENVELOPE
+    assert not built.struct.lpEnvelope
+
+
+def test_an_enumeration_entry_that_fails_to_convert_is_skipped(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def convert(value: int) -> int:
+        if value < 0:
+            raise ValueError("bad entry")
+        return value
+
+    found: list[int] = []
+    collect = collector("test", convert, found)
+    entries = [types.SimpleNamespace(contents=v) for v in (1, -1, 2)]
+    assert [collect(entry, None) for entry in entries] == [dg.DIENUM_CONTINUE] * 3
+    assert found == [1, 2]
+    assert "enumeration skipped an entry: bad entry" in caplog.text
 
 
 @pytest.mark.skipif(not WINDOWS, reason="DirectInput 8 is Windows only")

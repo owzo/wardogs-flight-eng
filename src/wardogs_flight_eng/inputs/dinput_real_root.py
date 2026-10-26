@@ -1,9 +1,12 @@
 """``IDirectInput8W`` calls of the real adapter: create, enumerate, open.
 
 Each raises ``DInputError`` on a failing ``HRESULT``: the root object and
-device creation have no status to hand back through the seam.
+device creation have no status to hand back through the seam. ``collector``
+builds the enumeration callbacks this module and ``dinput_real_device`` use.
 """
 
+import logging
+from collections.abc import Callable
 from ctypes import POINTER, byref, c_int, c_uint32, c_void_p
 from typing import Any
 
@@ -24,6 +27,8 @@ from wardogs_flight_eng.inputs.dinput_structs import (
     guid_text,
 )
 
+log = logging.getLogger(__name__)
+
 ENUM_DEVICES_CALLBACK = FUNCTYPE(c_int, POINTER(DIDEVICEINSTANCEW), c_void_p)
 _CREATE_DEVICE = method(
     DIRECTINPUT8_SLOTS["CreateDevice"], c_void_p, POINTER(c_void_p), c_void_p
@@ -35,6 +40,26 @@ _ENUM_DEVICES = method(
     c_void_p,
     c_uint32,
 )
+
+
+def collector[Item](
+    what: str, convert: Callable[[Any], Item], found: list[Item]
+) -> Callable[[Any, Any], int]:
+    """An enumeration callback appending ``convert(*entry)`` to ``found``.
+
+    A conversion error is logged and that entry skipped; the callback still
+    returns ``DIENUM_CONTINUE``, so one bad entry cannot end the enumeration
+    (an exception escaping a ctypes callback would return 0, i.e. stop).
+    """
+
+    def collect(entry: Any, _context: Any) -> int:
+        try:
+            found.append(convert(entry.contents))
+        except (ValueError, TypeError, OverflowError) as err:
+            log.warning("DirectInput %s enumeration skipped an entry: %s", what, err)
+        return DIENUM_CONTINUE
+
+    return collect
 
 
 def _failed(call: str, status: int) -> DInputError:
@@ -62,10 +87,7 @@ def directinput8_create(api: Win32, hinstance: int) -> int:
 def _enumerate(di: int, flags: int) -> list[DIDEVICEINSTANCEW]:
     found: list[DIDEVICEINSTANCEW] = []
 
-    def collect(instance: Any, _context: Any) -> int:
-        found.append(DIDEVICEINSTANCEW.from_buffer_copy(instance.contents))
-        return DIENUM_CONTINUE
-
+    collect = collector("device", DIDEVICEINSTANCEW.from_buffer_copy, found)
     callback = ENUM_DEVICES_CALLBACK(collect)
     status = com_call(di, _ENUM_DEVICES, DI8DEVCLASS_GAMECTRL, callback, None, flags)
     if status < 0:

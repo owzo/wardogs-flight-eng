@@ -25,7 +25,6 @@ from wardogs_flight_eng.inputs.dinput_guids import (
     DIDFT_AXIS,
     DIDOI_FFACTUATOR,
     DIEFT_ALL,
-    DIENUM_CONTINUE,
     DIERR_NOTINITIALIZED,
     DIPH_BYOFFSET,
     DIPH_DEVICE,
@@ -33,6 +32,7 @@ from wardogs_flight_eng.inputs.dinput_guids import (
     EFFECT_KIND_BY_GUID,
 )
 from wardogs_flight_eng.inputs.dinput_real_effects import EffectHandle, release_effect
+from wardogs_flight_eng.inputs.dinput_real_root import collector
 from wardogs_flight_eng.inputs.dinput_structs import (
     DIDATAFORMAT,
     DIDEVICEOBJECTINSTANCEW,
@@ -83,17 +83,16 @@ def _fail(call: str, status: int) -> DInputError:
     return DInputError(f"{call} failed: {status & 0xFFFFFFFF:#010x}")
 
 
+def _axis_info(item: Any) -> DiAxisInfo:
+    actuator = bool(item.dwFlags & DIDOI_FFACTUATOR)
+    return DiAxisInfo(int(item.dwOfs), str(item.tszName), actuator)
+
+
 def enum_axes(device: DeviceHandle) -> list[DiAxisInfo]:
     """``EnumObjects(DIDFT_AXIS)`` in ``dwOfs`` order (after ``SetDataFormat``)."""
     found: list[DiAxisInfo] = []
 
-    def collect(instance: Any, _context: Any) -> int:
-        item = instance.contents
-        actuator = bool(item.dwFlags & DIDOI_FFACTUATOR)
-        found.append(DiAxisInfo(int(item.dwOfs), str(item.tszName), actuator))
-        return DIENUM_CONTINUE
-
-    callback = ENUM_OBJECTS_CALLBACK(collect)
+    callback = ENUM_OBJECTS_CALLBACK(collector("axis", _axis_info, found))
     status = device_call(device, "EnumObjects", callback, None, DIDFT_AXIS)
     if status < 0:
         raise _fail("EnumObjects", status)
@@ -123,10 +122,7 @@ def enum_effect_guids(device: DeviceHandle) -> list[str]:
     """``EnumEffects(DIEFT_ALL)``: each supported effect's GUID text."""
     found: list[str] = []
 
-    def collect(info: Any, _context: Any) -> int:
-        found.append(guid_text(info.contents.guid))
-        return DIENUM_CONTINUE
-
+    collect = collector("effect", lambda info: guid_text(info.guid), found)
     callback = ENUM_EFFECTS_CALLBACK(collect)
     status = device_call(device, "EnumEffects", callback, None, DIEFT_ALL)
     if status < 0:

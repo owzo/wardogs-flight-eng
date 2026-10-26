@@ -3,9 +3,11 @@
 A COM call reads the function pointer from the interface's vtable and calls
 it through a ``WINFUNCTYPE`` prototype whose result is the raw ``HRESULT``
 (a signed ``LONG``, never ctypes' raising ``HRESULT`` type). The hidden
-window exists only because ``SetCooperativeLevel`` needs a top-level
-``HWND``: its class is registered once per process with ``DefWindowProcW``
-as the window procedure, and the window is never shown. Off Windows the
+window exists only because ``SetCooperativeLevel`` needs an ``HWND``: like
+SDL's helper window it is a message-only window (parent ``HWND_MESSAGE``),
+so it receives no broadcast ``SendMessage`` traffic that an unpumped thread
+would block; its class is registered once per process with
+``DefWindowProcW`` as the window procedure, and it is never shown. Off Windows the
 module imports (so the pure layers and tests can name it) but loading a DLL
 raises ``DInputError``.
 """
@@ -35,6 +37,7 @@ HRESULT = c_int32  # signed, so failures come back as negative ints
 WINDOW_CLASS = "WardogsFlightEngDirectInput"
 WINDOW_TITLE = "WardogsFlightEng"
 WS_OVERLAPPED = 0x00000000
+HWND_MESSAGE = c_void_p(-3)  # ((HWND)-3): the message-only parent
 ERROR_CLASS_ALREADY_EXISTS = 1410
 
 if sys.platform == "win32":
@@ -154,7 +157,7 @@ def _register_class(api: Win32, hinstance: int) -> None:
 
 
 def create_window(api: Win32) -> tuple[int, int]:
-    """``(hinstance, hwnd)`` of a new hidden top-level window (never shown)."""
+    """``(hinstance, hwnd)`` of a new message-only window (never shown)."""
     hinstance = int(api.call("GetModuleHandleW", None) or 0)
     _register_class(api, hinstance)
     position = (0, 0, 0, 0)
@@ -165,7 +168,7 @@ def create_window(api: Win32) -> tuple[int, int]:
         WINDOW_TITLE,
         WS_OVERLAPPED,
         *position,
-        None,
+        HWND_MESSAGE,
         None,
         hinstance,
         None,

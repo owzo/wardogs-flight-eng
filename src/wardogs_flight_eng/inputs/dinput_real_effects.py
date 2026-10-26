@@ -53,7 +53,8 @@ def create(device: int, effect: DiEffect) -> tuple[int, EffectHandle | None]:
 
 
 def set_parameters(handle: EffectHandle, effect: DiEffect, norestart: bool) -> int:
-    """``SetParameters`` with every parameter ``DiEffect`` carries."""
+    """``SetParameters`` of duration, gain, direction, type-specific block and
+    envelope (NULL when ``effect`` has none, so a stale one is removed)."""
     if handle.ptr is None:
         return DIERR_NOTINITIALIZED
     block = EffectStruct(effect)

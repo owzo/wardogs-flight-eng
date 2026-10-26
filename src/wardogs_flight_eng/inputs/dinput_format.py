@@ -86,7 +86,8 @@ def _type_specific(effect: DiEffect) -> Structure | ctypes.Array[DICONDITION]:
     """The ``DICONDITION[n]``, ``DIPERIODIC`` or ``DICONSTANTFORCE`` block."""
     if effect.periodic is not None:
         p = effect.periodic
-        return DIPERIODIC(_dword(p.magnitude), p.offset, _dword(p.phase), p.period_us)
+        period = _dword(p.period_us)
+        return DIPERIODIC(_dword(p.magnitude), p.offset, _dword(p.phase), period)
     if effect.constant is not None:
         return DICONSTANTFORCE(effect.constant.magnitude)
     blocks = [
@@ -141,10 +142,14 @@ class EffectStruct:
 
 
 def parameter_flags(effect: DiEffect, norestart: bool) -> int:
-    """``SetParameters`` flags for ``effect``: never ``DIEP_START``."""
+    """``SetParameters`` flags for ``effect``: never ``DIEP_START``.
+
+    ``DIEP_ENVELOPE`` is always set: an effect without an envelope sends a
+    NULL ``lpEnvelope``, which removes one an earlier update left behind (a
+    pooled slot reused by a transient with no fade).
+    """
     flags = DIEP_DURATION | DIEP_GAIN | DIEP_DIRECTION | DIEP_TYPESPECIFICPARAMS
-    if effect.envelope is not None:
-        flags |= DIEP_ENVELOPE
+    flags |= DIEP_ENVELOPE
     if norestart:
         flags |= DIEP_NORESTART
     return flags
