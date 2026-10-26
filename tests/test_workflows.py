@@ -33,4 +33,5 @@ def test_sha256sums_is_written_with_lf_only() -> None:
     text = (WORKFLOWS / "build-exe.yml").read_text(encoding="utf-8")
     step = text.split("- name: Write SHA256SUMS", 1)[1].split("- uses:", 1)[0]
     assert "WriteAllText" in step and "`n" in step
+    assert "`r" not in step
     assert "Out-File" not in step

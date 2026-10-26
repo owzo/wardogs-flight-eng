@@ -9,6 +9,7 @@ import argparse
 import json
 import logging
 import os
+import tempfile
 import time
 import uuid
 from pathlib import Path
@@ -37,14 +38,26 @@ def _read_template(path: Path) -> dict[str, Any]:
 
 
 def _write_preset(path: Path, document: dict[str, Any]) -> None:
-    """Write via a staging file and ``os.replace``: never a truncated preset."""
+    """Write via a uniquely named staging file and ``os.replace``: never a
+    truncated preset, and never another writer's ``.tmp`` file."""
     text = json.dumps(document, indent=4, ensure_ascii=False) + "\n"
-    staging = path.with_name(f"{path.name}.tmp")
+    staging: Path | None = None
     try:
-        staging.write_text(text, encoding="utf-8", newline="\n")
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            newline="\n",
+            dir=path.parent,
+            prefix=f"{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            staging = Path(handle.name)
+            handle.write(text)
         os.replace(staging, path)
     except OSError as err:
-        staging.unlink(missing_ok=True)
+        if staging is not None:
+            staging.unlink(missing_ok=True)
         raise CliError(f"cannot write preset {path}: {err.strerror}") from err
     log.info("Moza Cockpit preset written to %s", path)
 
@@ -58,6 +71,8 @@ def make_preset_command(args: argparse.Namespace, ctx: CliContext) -> int:
     out: Path = args.out
     if out.resolve() == args.template.resolve():
         raise CliError(f"--out {out}: refuses to overwrite the template it reads")
+    if out.resolve() == args.profile.resolve():
+        raise CliError(f"--out {out}: refuses to overwrite the profile it reads")
     profile = load_checked_profile(args.profile, load_constants())
     template = _read_template(args.template)
     document, changes = rewrite_preset(

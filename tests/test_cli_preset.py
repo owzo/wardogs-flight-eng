@@ -1,6 +1,7 @@
 """``make-preset``: writes a Moza Cockpit preset and prints what changed."""
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -20,11 +21,13 @@ def quiet_logging(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "appdata"))
 
 
-def _make(template: Path, out: Path, division: str = "A") -> list[str]:
+def _make(
+    template: Path, out: Path, division: str = "A", profile: Path = LAKOTA
+) -> list[str]:
     return [
         "make-preset",
         "--profile",
-        str(LAKOTA),
+        str(profile),
         "--template",
         str(template),
         "--division",
@@ -109,3 +112,38 @@ def test_make_preset_leaves_no_staging_file(tmp_path: Path) -> None:
     out = tmp_path / "new.preset"
     assert invoke(_make(FIXTURE, out)).code == 0
     assert out.exists() and not list(tmp_path.glob("*.tmp"))
+
+
+def test_make_preset_refuses_to_overwrite_its_profile(tmp_path: Path) -> None:
+    profile = tmp_path / "mine.json"
+    profile.write_bytes(LAKOTA.read_bytes())
+    result = invoke(_make(FIXTURE, profile, profile=profile))
+    assert result.code == 1
+    assert f"--out {profile}: refuses to overwrite the profile it reads" in (
+        result.output
+    )
+    assert profile.read_bytes() == LAKOTA.read_bytes()
+
+
+def test_make_preset_stages_under_a_unique_name(tmp_path: Path) -> None:
+    out = tmp_path / "new.preset"
+    stale = tmp_path / "new.preset.tmp"
+    stale.write_text("another writer's staging file", encoding="utf-8")
+    assert invoke(_make(FIXTURE, out)).code == 0
+    assert json.loads(out.read_text(encoding="utf-8"))["device_params"]
+    assert stale.read_text(encoding="utf-8") == "another writer's staging file"
+    assert list(tmp_path.glob("*.tmp")) == [stale]
+
+
+def test_make_preset_failed_replace_leaves_no_staging_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def refuse(source: object, target: object) -> None:
+        raise PermissionError(13, "Access is denied")
+
+    monkeypatch.setattr(os, "replace", refuse)
+    out = tmp_path / "new.preset"
+    result = invoke(_make(FIXTURE, out))
+    assert result.code == 1
+    assert f"cannot write preset {out}: Access is denied" in result.output
+    assert not out.exists() and not list(tmp_path.glob("*.tmp"))

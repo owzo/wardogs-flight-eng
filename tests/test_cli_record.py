@@ -163,3 +163,14 @@ def test_record_leaves_no_staging_file(profile: Path, tmp_path: Path) -> None:
     args = _record(profile, out, "--duration", "0.02")
     assert invoke(args, api=FakeSdl(stick(), pedals())).code == 0
     assert out.exists() and not list(tmp_path.glob("*.tmp"))
+
+
+def test_record_stages_under_a_unique_name(profile: Path, tmp_path: Path) -> None:
+    out = tmp_path / "flight.json"
+    stale = tmp_path / "flight.json.tmp"
+    stale.write_text("another writer's staging file", encoding="utf-8")
+    args = _record(profile, out, "--duration", "0.02")
+    assert invoke(args, api=FakeSdl(stick(), pedals())).code == 0
+    assert Scenario.load(out).rate_hz == 100.0
+    assert stale.read_text(encoding="utf-8") == "another writer's staging file"
+    assert list(tmp_path.glob("*.tmp")) == [stale]
