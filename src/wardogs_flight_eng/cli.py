@@ -104,7 +104,9 @@ def _add_tools(sub: "argparse._SubParsersAction[_Parser]", common: _Parser) -> N
     cli_dinput_devices.add_backend_argument(listing)
     check = sub.add_parser("check-device", parents=[common], help="probe the base")
     cli_dinput_devices.add_backend_argument(check)
-    check.add_argument("--guid", help="device GUID (default: first with haptics)")
+    check.add_argument(
+        "--guid", help="SDL GUID (sdl default: first with haptics; dinput8: required)"
+    )
     calibrate = sub.add_parser("calibrate", parents=[common], help="record ranges")
     calibrate.add_argument("--profile", type=Path, required=True)
     sub.add_parser("show-constants", parents=[common], help="print game constants")

@@ -72,11 +72,14 @@ paths, turns that day from "stop and rewrite" into "switch a flag".
   seam, `inputs/protocol` (`InputDevice`, `DeviceLostError`) and
   `outputs/haptic_axes` only; the verified SDL modules are not refactored
   (shared logic is duplicated within the file limits rather than
-  generalised). `ctypes` is imported only by `inputs/dinput_real.py`,
-  `inputs/dinput_structs.py` and the pre-existing `inputs/sdl_real.py`.
+  generalised). `ctypes` is imported only by the `inputs/dinput_*`
+  adapter modules (`dinput_real`, `dinput_real_root`,
+  `dinput_real_device`, `dinput_real_effects`, `dinput_com`,
+  `dinput_structs`, `dinput_format`) and the pre-existing
+  `inputs/sdl_real.py`.
 - The layering test gains `inputs.dinput_real` and `inputs.dinput_structs`
   to the set of modules the pure packages must not import, and asserts
-  `ctypes` is imported nowhere but those three.
+  `ctypes` is imported nowhere but those modules.
 - Windows-only at runtime: on another OS `--backend dinput8` is a
   configuration error naming the platform. The fake makes the suite pass
   everywhere.
@@ -131,9 +134,9 @@ paths, turns that day from "stop and rewrite" into "switch a flag".
 - `DIERR_INPUTLOST`, `DIERR_NOTACQUIRED`, `DIERR_UNPLUGGED` mean the device
   went away or lost acquisition.
 - A window handle is required for the cooperative level. SDL uses a
-  hidden helper window; this backend creates its own hidden top-level
-  window through `user32` (`CreateWindowExW`, never shown) and destroys it
-  in `close`.
+  hidden helper window; this backend creates its own message-only window
+  through `user32` (`CreateWindowExW` with the `HWND_MESSAGE` parent, as
+  SDL's helper window; never shown) and destroys it in `close`.
 
 ## Architecture (decided)
 
@@ -216,7 +219,12 @@ tests/test_dinput_hardware.py  WFE_HARDWARE=1 conformance (skipped)
 1. **One device object for the base.** SDL2's DirectInput joystick driver
    opens every DirectInput joystick `DISCL_EXCLUSIVE | DISCL_BACKGROUND`,
    so a second exclusive acquire of the same base would fail. Under
-   `--backend dinput8` the base is therefore **not opened by SDL at all**:
+   `--backend dinput8` the base is therefore **never held open by SDL**.
+   SDL's GUID scan (finding each SDL-opened alias by its GUID) opens the
+   attached joysticks in turn and closes each one that does not match, so
+   it may open and close the base transiently, before the DirectInput
+   open; that is why `open_devices` opens the base last, after every SDL
+   alias, so the scan never meets the base acquired exclusively.
    `inputs/dinput_device.py::DInputJoystick` implements `InputDevice`
    (`poll` = `Poll` + `GetDeviceState(DIJOYSTATE2)`, `axis`, `button`,
    `alive`, `name`, and `guid` = the profile's SDL GUID string so
@@ -275,7 +283,7 @@ tests/test_dinput_hardware.py  WFE_HARDWARE=1 conformance (skipped)
    hardware test carries a magnitude ramp and a spool-up frequency sweep
    to tell these apart; if the AB9 shows the jump, the backend switches to
    holding the phase between `Start`s using `HeldEffects.restarted`, which
-   is kept for that purpose. Rulings 2's phrase "applying the sine phase
+   is kept for that purpose. Ruling 2's phrase "applying the sine phase
    carry" and the Architecture bullet "applies only then" are superseded
    by this ruling.
 
@@ -291,8 +299,8 @@ tests/test_dinput_hardware.py  WFE_HARDWARE=1 conformance (skipped)
 
 ## Acceptance
 
-1. Gates green; layering test passes with `ctypes` confined to
-   `dinput_real.py`, `dinput_structs.py` and `sdl_real.py`.
+1. Gates green; layering test passes with `ctypes` confined to the
+   `inputs/dinput_*` adapter modules and `sdl_real.py`.
 2. Effect builder tests pin every scale and unit (±10000, µs, phase).
 3. Backend tests against the fake mirror the SDL backend suite: persistent
    update-on-change (no `Start` after an in-place update) and half-life

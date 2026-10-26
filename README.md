@@ -11,13 +11,13 @@ weapon recoil, through a Moza AB9 or any other DirectInput force-feedback
 base. It is MIT licensed, Windows only, and Python 3.12+.
 
 > **⚠️ Not yet tested on real hardware.** Every force path in this program
-> has been verified only against a simulated SDL layer. The author's Moza AB9,
-> collective and pedals are still in shipment, so **no force has ever been
-> played on a physical base**. If you run it on yours before the first
-> hardware pass is reported here: keep a hand on the stick, keep the shipped
-> `force_ceiling` (0.6), start with `check-device` and the conformance test
-> described under "Hardware tuning pass", and treat every feel value as a
-> placeholder. You are the first test pilot.
+> has been verified only against simulated SDL and DirectInput layers. The
+> author's Moza AB9, collective and pedals are still in shipment, so **no
+> force has ever been played on a physical base**. If you run it on yours
+> before the first hardware pass is reported here: keep a hand on the stick,
+> keep the shipped `force_ceiling` (0.6), start with `check-device` and the
+> conformance test described under "Hardware tuning pass", and treat every
+> feel value as a placeholder. You are the first test pilot.
 
 ## What this does and does not touch
 
@@ -28,7 +28,7 @@ base. It is MIT licensed, Windows only, and Python 3.12+.
 
 ## Status
 
-Version 0.2.0.
+Version 0.3.0.
 
 ![CI](https://github.com/owzo/wardogs-flight-eng/actions/workflows/ci.yml/badge.svg)
 
@@ -38,14 +38,39 @@ Version 0.2.0.
   simulated devices through the engine and write a force log and a plot (see
   "Try it without hardware"). The test suite covers the engine, the profile
   and constants loading, the runtime loop and the CLI.
-- **Built but not yet run on an AB9:** the SDL haptic path that talks to a
-  real base, the friction, damper and inertia effects among it. It was written
-  and tested against a fake SDL implementation, and SDL's joystick enumeration
-  works in the packaged `.exe`, but no force has yet been played on a Moza
-  AB9: the owner's base has not arrived. Treat the first run as a tuning
-  session (see "Hardware tuning pass"), keep a hand near the stick, and keep
-  the default `force_ceiling` in the shipped profiles. Do not assume the feel
-  values are right for your base.
+- **Built but not yet run on an AB9:** the two force backends that talk to a
+  real base, the friction, damper and inertia effects among them: the SDL
+  haptic path (the default) and the DirectInput 8 fallback (see "Choosing the
+  force backend"). They were written and tested against fake SDL and
+  DirectInput implementations, and SDL's joystick enumeration works in the
+  packaged `.exe`, but no force has yet been played on a Moza AB9: the
+  owner's base has not arrived. Treat the first run as a tuning session (see
+  "Hardware tuning pass"), keep a hand near the stick, and keep the default
+  `force_ceiling` in the shipped profiles. Do not assume the feel values are
+  right for your base.
+- **Changed from 0.2.0:** profiles from 0.2.0 load unchanged (every new field
+  defaults to the 0.2.0 behaviour). New:
+  - `--backend dinput8` on `run`, `check-device` and `list-devices`: a
+    DirectInput 8 fallback for a base that does not accept what SDL sends,
+    with its own hardware conformance test, `tests/test_dinput_hardware.py`
+    (see "Choosing the force backend").
+  - `run --refresh-every-tick` (SDL backend only), for the persistent-effect
+    A/B in the tuning pass.
+  - `feel.trim_style` (optional, default `tap`): `hold` makes `trim_lock` act
+    while it is held, in both feel modes (see "Feel modes").
+  - `rotor.min_amplitude` (optional, default `0`): a rotor buzz below it is
+    sent as zero (see "What the forces are and where the numbers come
+    from").
+  - `make-preset` writes the Moza Cockpit side of division A or B from your
+    own Cockpit export (see "Moza Cockpit companion settings").
+  - `record` captures your real controls into a scenario that `dry-run`
+    replays (see "Try it without hardware").
+  - CI: the four gates run on Windows and Linux on every push to `main` and
+    every pull request, and a tag builds the `.exe` and a `SHA256SUMS` file
+    as a workflow artifact (see "Releasing").
+  - Fixes: the re-copy hint for 0.1.0 profiles appears only when a field
+    0.2.0 added is missing, and `calibrate` now gives it too; `dry-run` plays
+    a scenario's duration rounded to whole ticks rather than truncated.
 - **Changed from 0.1.0:** the profile format. Profiles copied from 0.1.0 must
   be re-copied; the error says so (see "Feel modes").
 - **Not built:** collective or yaw force feedback, a GUI, reading any game
@@ -190,7 +215,8 @@ stick does not move. It prints one `yes`/`no` per primitive and one verdict:
 
 Note that "accepted" means the driver took the request; only flying it, or
 `tests/test_sdl_hardware.py` (see the tuning pass), shows the stick actually
-moves.
+moves. To probe the base through DirectInput instead, see "Choosing the force
+backend".
 
 ### 5. Run
 
@@ -199,9 +225,10 @@ wardogs-flight-eng run --profile my-littlebird-miniguns.json
 ```
 
 Add `--rate HZ` (default 200) to change the loop rate, `--log forces.jsonl` to
-also record every command, and `--verbose` for debug logging (it goes after the
-subcommand). To switch airframes in flight, give several profiles and tap the
-`profile_cycle` button:
+also record every command, `--backend dinput8` to drive the base through
+DirectInput (see "Choosing the force backend"), and `--verbose` for debug
+logging (it goes after the subcommand). To switch airframes in flight, give
+several profiles and tap the `profile_cycle` button:
 
 ```
 wardogs-flight-eng run --profile a.json --profile b.json
@@ -236,6 +263,63 @@ during the run (`stopped: error`), or the base's release was not confirmed.
 
 Logs are written to `%LOCALAPPDATA%\WardogsFlightEng\logs\wardogs-flight-eng.log`
 and to stderr.
+
+## Choosing the force backend
+
+`run`, `check-device` and `list-devices` take `--backend sdl` (the default)
+or `--backend dinput8`.
+
+- **`sdl`** opens every device through SDL2 and plays the forces through
+  SDL2's haptic API. Everything else in this README describes it.
+- **`dinput8`** is the fallback for a base whose driver does not accept what
+  SDL sends (see "Hardware tuning pass", step 3). The force base is read and
+  driven through one DirectInput 8 device object (`dinput8.dll`, part of
+  Windows; nothing is installed), while every other device (collective,
+  pedals, a separate grip) is still read through SDL. The clamp, watchdog,
+  `all_off` latch and release on stop are the same, and an `unboosted`
+  profile on a base without friction is refused the same way. It is
+  Windows only: on any other platform `--backend dinput8` is a
+  configuration error (exit 1).
+
+The profile does not change. The base keeps the SDL `guid` that
+`list-devices` showed (a base named only by `product` is refused under
+`dinput8`); Flight Eng reads the vendor and product ids from it and opens
+the attached DirectInput instance with the same ids, preferring one with
+force feedback. If several instances match, the error names them; attach
+only one.
+
+**Confirm the base's axis numbers before flying.** Under `dinput8` the
+base's axis numbers in `device_map` count its DirectInput axes in offset
+order, which is meant to match SDL's numbering but has not been checked on a
+real base. Run
+
+```
+wardogs-flight-eng list-devices --backend dinput8 --live
+```
+
+It prints every DirectInput game controller (`instance`, `product`,
+`vid:pid`, `force feedback`), then reprints the first force-feedback
+instance's axes every 0.1 s until Ctrl+C: index, offset name (`DIJOFS_X`
+...), axis name, whether it is a force-feedback actuator, and its live
+value. Move the stick and check that your profile's `pitch` and `roll`
+numbers are the axes that move. Both must be actuator axes, or `run`
+refuses to start (exit 1) and names the axis.
+
+**Probe it.** `check-device --backend dinput8` needs the base's SDL GUID
+(without `--guid` it exits 1 and says so):
+
+```
+wardogs-flight-eng check-device --backend dinput8 --guid <the base's guid>
+```
+
+It prints the matched instance, whether it was acquired and the gain it
+reports, the axis table above, and then the same primitive table and
+`PASS` / `WARN` / `FAIL` verdict as the SDL check (see "First run", step 4).
+Nothing is played.
+
+**Run it.** `run --backend dinput8 --profile ...` flies as usual.
+`--refresh-every-tick` is an SDL option: with `--backend dinput8` it is a
+usage error (exit 1), reported before any device is opened.
 
 ## Try it without hardware
 
@@ -575,23 +659,48 @@ code task.
 3. Run `wardogs-flight-eng check-device`, then the measured conformance test
    with `WFE_HARDWARE=1 uv run pytest tests/test_sdl_hardware.py` (base powered,
    stick released; `WFE_PITCH_AXIS`, `WFE_ROLL_AXIS`, `WFE_PITCH_INVERT` and
-   `WFE_ROLL_INVERT` set the stick's bindings). If `spring_center_moves` is
-   false, open an issue titled "dinput8 fallback backend" (the planned fix is a
-   `ctypes` binding to `dinput8.dll` behind the same `ForceBackend` interface).
-   Then A/B the persistent-effect refresh. By default the backend uploads a
-   spring or rotor sine only when it changes and re-runs it every half
-   effect length (about twice a second), because on Windows every update or
-   run restarts a playing effect. `SdlHapticBackend(...,
-   refresh_every_tick=True)` restores the earlier behaviour: update and re-run
-   all four persistent effects every tick; from the command line that is
-   `run --refresh-every-tick`. Run the conformance test once
-   as above and once with `WFE_REFRESH_EVERY_TICK=1` added, and compare the
-   spring hold and the logged sine range: the buzz should be smooth in both,
-   and if only the per-tick mode feels right, report it in an issue.
+   `WFE_ROLL_INVERT` set the stick's bindings).
+
+   If `spring_center_moves` is `no`, or the measured SDL test fails, try the
+   DirectInput backend (see "Choosing the force backend"). Run
+   `wardogs-flight-eng check-device --backend dinput8 --guid <the base's guid>`,
+   then its measured test:
+
+   ```
+   WFE_HARDWARE=1 WFE_BACKEND=dinput8 uv run pytest tests/test_dinput_hardware.py -v --log-cli-level=INFO
+   ```
+
+   with the same `WFE_*_AXIS` and `WFE_*_INVERT` bindings, plus
+   `WFE_SDL_GUID=<the base's guid>` to match the base as `run` does (and to
+   run the primitive probe as well; without it the test uses the first
+   force-feedback instance). `WFE_UNPLUG=1` adds an interactive unplug
+   check. Read the two logged `measured ... Hz (expected ... Hz)` lines of
+   the sine checks: a 5 Hz sine whose magnitude ramps while it is re-sent
+   every tick, and a sweep from 3 to 6 Hz (expected 4.5 Hz). The test fails
+   when either is more than 15 % off. If either is far from the commanded
+   value (for the ramp, a phase jump on every send reads roughly double),
+   the base's driver applies the sine phase on every send, and the sine
+   clock must be switched to hold the phase between starts: report it in an
+   issue with the log (ruling 8 of
+   `docs/superpowers/specs/2026-10-25-dinput8-backend-design.md`). If the
+   test passes, fly with `run --backend dinput8`.
+
+   If the SDL backend passes, A/B its persistent-effect refresh instead. By
+   default the SDL backend uploads a spring or rotor sine only when it
+   changes and re-runs it every half effect length (about twice a second),
+   because on Windows every update or run restarts a playing effect.
+   `SdlHapticBackend(..., refresh_every_tick=True)` restores the earlier
+   behaviour: update and re-run all four persistent effects every tick; from
+   the command line that is `run --refresh-every-tick`. Run the SDL
+   conformance test once as above and once with `WFE_REFRESH_EVERY_TICK=1`
+   added, and compare the spring hold and the logged sine range: the buzz
+   should be smooth in both, and if only the per-tick mode feels right,
+   report it in an issue.
 4. Fly each profile and adjust only the `taste` values. While `run` is
-   active, SDL holds the base's DirectInput device exclusively for force
-   feedback: the game still reads the stick, but no other program can play
-   force effects on the base until `run` exits.
+   active it holds the base's DirectInput device exclusively for force
+   feedback (through SDL, or directly with `--backend dinput8`): the game
+   still reads the stick, but no other program can play force effects on
+   the base until `run` exits.
 5. Unplug the base mid-run: expect `stopped: device_lost`, exit code 2 and no
    residual force when it is plugged back in. If it still pushes,
    power-cycle it and open an issue.
