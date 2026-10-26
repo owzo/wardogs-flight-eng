@@ -129,8 +129,13 @@ paths, turns that day from "stop and rewrite" into "switch a flag".
   `dinput8.dll`: the `DIDATAFORMAT` for `DIJOYSTATE2` is built by hand in
   `dinput_structs.py`.
 - `DIPROP_AUTOCENTER` is set to off and `DIPROP_FFGAIN` to 10000 before
-  `Acquire` (as SDL's haptic layer does), then `DIPROP_FFGAIN` is read
-  back for the probe report.
+  `Acquire`, then `DIPROP_FFGAIN` is read back for the probe report. SDL's
+  haptic layer sets both after `Acquire` and tolerates a refusal; this
+  backend sets them before `Acquire`, because Windows' HID path refuses
+  `DIPROP_AUTOCENTER` on an acquired device, and tolerates
+  `DIERR_UNSUPPORTED` from either with one WARNING each. Every other
+  failure of either call aborts the open (lost codes as `DeviceLostError`,
+  the rest as `DInputError`).
 - `DIERR_INPUTLOST`, `DIERR_NOTACQUIRED`, `DIERR_UNPLUGGED` mean the device
   went away or lost acquisition.
 - A window handle is required for the cooperative level. SDL uses a
@@ -211,20 +216,27 @@ tests/test_dinput_hardware.py  WFE_HARDWARE=1 conformance (skipped)
   hidden window, idempotent.
 - Finite effect lengths carry over, so a frozen loop lets the base time
   the forces out.
-- Ctrl+C during `Acquire` or effect creation follows the same
-  `_fly`/`_close_unowned` path.
+- Ctrl+C during effect creation follows the same `_fly`/`_close_unowned`
+  path. Under `dinput8` the `Acquire` happens in `open_devices`, before
+  `_fly` installs its handler; a Ctrl+C there is covered by the
+  `BaseException` release in `open_dinput_joystick` (through
+  `open_dinput_instance`), which releases the device and re-raises.
 
 ## Builder-check rulings (author's calls, 2026-10-25)
 
-1. **One device object for the base.** SDL2's DirectInput joystick driver
-   opens every DirectInput joystick `DISCL_EXCLUSIVE | DISCL_BACKGROUND`,
-   so a second exclusive acquire of the same base would fail. Under
-   `--backend dinput8` the base is therefore **never held open by SDL**.
-   SDL's GUID scan (finding each SDL-opened alias by its GUID) opens the
-   attached joysticks in turn and closes each one that does not match, so
-   it may open and close the base transiently, before the DirectInput
-   open; that is why `open_devices` opens the base last, after every SDL
-   alias, so the scan never meets the base acquired exclusively.
+1. **One device object for the base.** SDL2's DirectInput *joystick*
+   driver opens devices `DISCL_NONEXCLUSIVE | DISCL_BACKGROUND`; it is
+   SDL's *haptic* open that is exclusive, and non-exclusive readers are
+   permitted beside an exclusive holder. Under `--backend dinput8` the base
+   is **never held open by SDL**: one DirectInput device object reads it
+   and drives its force, and that design stands. SDL's GUID scan (finding
+   each SDL-opened alias by its GUID) opens the attached joysticks in turn
+   and closes each one that does not match, so it may open and close the
+   base transiently, before the DirectInput open. `open_devices` opens the
+   base last, after every SDL alias, as belt-and-braces: a non-exclusive
+   scan would not be refused by the exclusive holder anyway. `SDL_INIT_HAPTIC`
+   still does a transient, non-acquiring `CreateDevice` on the base under
+   `dinput8`.
    `inputs/dinput_device.py::DInputJoystick` implements `InputDevice`
    (`poll` = `Poll` + `GetDeviceState(DIJOYSTATE2)`, `axis`, `button`,
    `alive`, `name`, and `guid` = the profile's SDL GUID string so
@@ -290,9 +302,9 @@ tests/test_dinput_hardware.py  WFE_HARDWARE=1 conformance (skipped)
 ## Left to the builder
 
 - The exact ctypes struct layouts and vtable indices (from the DirectInput 8
-  headers); whether to generate the hidden window with `WS_OVERLAPPED` or
-  a message-only parent (try the former; a `SetCooperativeLevel` failure is
-  a clear `DInputError`).
+  headers). Decided: the window is message-only (`HWND_MESSAGE` parent,
+  see the DirectInput facts above), not `WS_OVERLAPPED`; a
+  `SetCooperativeLevel` failure is a clear `DInputError`.
 - Whether `dinput_persistent.py` can reuse `PersistentEffects` through a
   small channel protocol or needs its own copy.
 - Log wording; `list-devices --backend dinput8` table columns.

@@ -301,9 +301,12 @@ It prints every DirectInput game controller (`instance`, `product`,
 `vid:pid`, `force feedback`), then reprints the first force-feedback
 instance's axes every 0.1 s until Ctrl+C: index, offset name (`DIJOFS_X`
 ...), axis name, whether it is a force-feedback actuator, and its live
-value. Move the stick and check that your profile's `pitch` and `roll`
-numbers are the axes that move. Both must be actuator axes, or `run`
-refuses to start (exit 1) and names the axis.
+value, then a `buttons held:` line. Move the stick and check that your
+profile's `pitch` and `roll` numbers are the axes that move. Both must be
+actuator axes, or `run` refuses to start (exit 1) and names the axis.
+Confirm `device_map.buttons` for the base the same way: press each mapped
+button (`trim_lock`, `fire`, ...) in `--live` and read its index from the
+`buttons held:` line.
 
 **Probe it.** `check-device --backend dinput8` needs the base's SDL GUID
 (without `--guid` it exits 1 and says so):
@@ -313,7 +316,8 @@ wardogs-flight-eng check-device --backend dinput8 --guid <the base's guid>
 ```
 
 It prints the matched instance, whether it was acquired and the gain it
-reports, the axis table above, and then the same primitive table and
+reports, an axis table with the live view's columns minus the live value,
+and then the same primitive table and
 `PASS` / `WARN` / `FAIL` verdict as the SDL check (see "First run", step 4).
 Nothing is played.
 
@@ -677,8 +681,10 @@ code task.
    check. Read the two logged `measured ... Hz (expected ... Hz)` lines of
    the sine checks: a 5 Hz sine whose magnitude ramps while it is re-sent
    every tick, and a sweep from 3 to 6 Hz (expected 4.5 Hz). The test fails
-   when either is more than 15 % off. If either is far from the commanded
-   value (for the ramp, a phase jump on every send reads roughly double),
+   when either is more than 15 % off. The magnitude ramp is the decisive
+   check for the phase-jump mode: a phase jump on every send reads about
+   2x the commanded 5 Hz. The sweep is only a sanity check; at the 15 %
+   tolerance it cannot resolve a small bias. If the ramp reads far from 5 Hz,
    the base's driver applies the sine phase on every send, and the sine
    clock must be switched to hold the phase between starts: report it in an
    issue with the log (ruling 8 of
