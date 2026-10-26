@@ -62,14 +62,16 @@ def test_same_effect_within_half_length_makes_no_call() -> None:
     assert fake.names() == ["create_effect", "start"]
 
 
-def test_changed_effect_updates_in_place_without_start() -> None:
+def test_changed_effect_updates_in_place_without_start_or_timer_reset() -> None:
     fake, held = _held()
     held.play(0.0, PITCH, _spring())
-    _played(held, 0.1, PITCH, _spring(center=0.3))
+    _played(held, 0.4, PITCH, _spring(center=0.3))
     assert fake.names() == ["create_effect", "start", "set_parameters"]
     assert fake.args("set_parameters")[0][2] is True
     assert fake.effects[0] == _spring(center=0.3)
     assert not held.restarted(PITCH)
+    _played(held, 0.51, PITCH, _spring(center=0.3))  # half-life from the 0 s start
+    assert fake.names()[3:] == ["start"]
 
 
 def test_refused_in_place_update_latches_a_restart(

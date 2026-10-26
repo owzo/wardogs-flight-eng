@@ -1,13 +1,13 @@
 """The force base as an ``InputDevice`` over one acquired DirectInput device.
 
-SDL opens every DirectInput joystick exclusively, so under ``--backend
-dinput8`` the base is read and driven through this single device object.
-``open_dinput_joystick`` matches the SDL GUID, then sets exclusive background
-cooperation, auto-centre off and full gain, acquires, resets and switches the
-actuators on. Axis ``i`` is the ``i``-th readable axis object in ``dwOfs``
-order, the order SDL's DirectInput driver numbers them; objects outside the
-eight ``DIJOYSTATE2`` axis slots (velocity, acceleration, force axes) are
-dropped, as SDL drops them.
+Under ``--backend dinput8`` the base is read and driven through this single
+device object. ``open_dinput_joystick`` matches the SDL GUID, then sets
+exclusive background cooperation, auto-centre off and full gain (either of the
+last two may be refused as unsupported: one warning, the open goes on),
+acquires, resets and switches the actuators on. Axis ``i`` is the ``i``-th
+readable axis object in ``dwOfs`` order, the order SDL's DirectInput driver
+numbers them; objects outside the eight ``DIJOYSTATE2`` axis slots (velocity,
+acceleration, force axes) are dropped, as SDL drops them.
 """
 
 import logging
@@ -28,6 +28,7 @@ from wardogs_flight_eng.inputs.dinput_match import (
     match_sdl_guid,
     vid_pid_from_sdl_guid,
 )
+from wardogs_flight_eng.inputs.dinput_refusals import tolerate_unsupported
 from wardogs_flight_eng.inputs.protocol import (
     DeviceLostError,
     InputConfigError,
@@ -142,8 +143,12 @@ def _prepare(api: DirectInputApi, handle: DiDeviceHandle) -> None:
         api.set_cooperative_exclusive_background(handle),
         "set_cooperative_exclusive_background",
     )
-    checked(api.set_autocenter_off(handle), "set_autocenter_off")
-    checked(api.set_ff_gain(handle, FULL_GAIN), "set_ff_gain")
+    autocenter = api.set_autocenter_off(handle)
+    checked(
+        tolerate_unsupported(autocenter, "set_autocenter_off"), "set_autocenter_off"
+    )
+    gain = api.set_ff_gain(handle, FULL_GAIN)
+    checked(tolerate_unsupported(gain, "set_ff_gain"), "set_ff_gain")
     checked(api.acquire(handle), "acquire")
     checked(api.ff_command(handle, api.DISFFC_RESET), "ff_command(DISFFC_RESET)")
     checked(

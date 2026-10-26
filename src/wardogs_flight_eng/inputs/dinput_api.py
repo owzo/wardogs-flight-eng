@@ -1,14 +1,13 @@
 """The DirectInput 8 seam: the calls this package makes, plus struct mirrors.
 
-Every DirectInput call goes through a ``DirectInputApi`` object so tests
-substitute a fake; the real adapter is the ctypes COM binding in
-``dinput_real``. Calls return DirectInput's ``HRESULT`` status as a signed
-32-bit int (``< 0`` = failure) but use Python types: GUIDs are their
-``{xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}`` text, device and effect handles are
-opaque objects, and effects are the ``DiEffect`` mirror below, which the real
-adapter converts to a genuine ``DIEFFECT``. Units are DirectInput's: ±10000
-magnitudes, coefficients and offsets; 0..10000 saturation, dead band and
-gain; microseconds for durations and periods; phase in 1/100 degree.
+Every DirectInput call goes through a ``DirectInputApi`` object so tests substitute
+a fake; the real adapter is the ctypes COM binding in ``dinput_real``. Calls return
+DirectInput's ``HRESULT`` status as a signed 32-bit int (``< 0`` = failure) but use
+Python types: GUIDs are their ``{xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}`` text,
+device and effect handles are opaque objects, and effects are the ``DiEffect``
+mirror below, which the real adapter converts to a genuine ``DIEFFECT``. Units are
+DirectInput's: ±10000 magnitudes, coefficients and offsets; 0..10000 saturation,
+dead band and gain; microseconds for durations and periods; phase in 1/100 degree.
 """
 
 from dataclasses import dataclass
@@ -32,6 +31,7 @@ DIERR_UNPLUGGED = 0x80040209 - (1 << 32)
 DIERR_EFFECTPLAYING = 0x80040208 - (1 << 32)
 DIERR_DEVICENOTREG = 0x80040154 - (1 << 32)  # REGDB_E_CLASSNOTREG
 DIERR_INVALIDPARAM = 0x80070057 - (1 << 32)  # E_INVALIDARG
+DIERR_UNSUPPORTED = 0x80004001 - (1 << 32)  # E_NOTIMPL
 
 # IDirectInputDevice8::SendForceFeedbackCommand commands.
 DISFFC_RESET = 0x00000001

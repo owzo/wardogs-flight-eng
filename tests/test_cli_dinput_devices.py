@@ -87,6 +87,25 @@ def test_list_devices_dinput8_live_shows_axes_until_ctrl_c(
     assert result.output.count("unreadable: Force X") == 1
     x_rows = [r for r in result.output.splitlines() if "X Axis" in r]
     assert x_rows == ["0 0 DIJOFS_X X Axis yes +1.00"] * 2
+    assert result.output.count("buttons held: none") == 2
+    released(di)
+
+
+def test_list_devices_dinput8_live_shows_the_held_buttons(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def sleep(seconds: float) -> None:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli_dinput_devices, "sleep", sleep)
+    device = base()
+    buttons = tuple(index == 3 for index in range(len(device.state.buttons)))
+    device.state = dataclasses.replace(device.state, buttons=buttons)
+    di = FakeDirectInput(device)
+    result = invoke(dinput8(["list-devices", "--live"]), dinput_api=di)
+    assert result.code == 0
+    held = [r for r in result.output.splitlines() if r.startswith("buttons held")]
+    assert held == ["buttons held: 3"]
     released(di)
 
 

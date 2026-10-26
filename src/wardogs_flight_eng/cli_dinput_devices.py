@@ -150,7 +150,8 @@ def list_dinput_devices_command(args: argparse.Namespace, ctx: CliContext) -> in
 
 
 def _live(api: DirectInputApi, infos: list[DiDeviceInfo], ctx: CliContext) -> None:
-    """Reprint the first force-feedback instance's axes until Ctrl+C."""
+    """Reprint the first force-feedback instance's axes and held buttons
+    until Ctrl+C."""
     found = [info for info in infos if info.force_feedback]
     if not found:
         raise CliError("no force-feedback DirectInput device is attached", EXIT_DEVICE)
@@ -175,3 +176,5 @@ def _live_lines(joystick: DInputJoystick, ctx: CliContext) -> None:
     for index, axis in enumerate(joystick.axes_info):
         cells = " ".join(_axis_cells(index, axis))
         ctx.console.line(f"{cells} {joystick.axis(index):+.2f}")
+    held = [str(b) for b in range(joystick.button_count) if joystick.button(b)]
+    ctx.console.line(f"buttons held: {', '.join(held) or 'none'}")
