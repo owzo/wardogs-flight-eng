@@ -8,8 +8,9 @@ from cli_support import invoke
 from dinput_support import FakeDirectInput, ab9
 
 from wardogs_flight_eng import cli_dinput_devices
-from wardogs_flight_eng.cli_console import CliError
-from wardogs_flight_eng.inputs.dinput_api import DIERR_INVALIDPARAM
+from wardogs_flight_eng.cli_console import EXIT_DEVICE, CliError
+from wardogs_flight_eng.inputs import dinput_real
+from wardogs_flight_eng.inputs.dinput_api import DIERR_INVALIDPARAM, DInputError
 
 
 @pytest.fixture(autouse=True)
@@ -89,6 +90,21 @@ def test_list_devices_dinput8_live_shows_axes_until_ctrl_c(
     released(di)
 
 
-def test_the_real_adapter_is_not_in_this_build() -> None:
-    with pytest.raises(CliError, match="DirectInput adapter is not available"):
+def test_the_real_adapter_is_the_shared_ctypes_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    di = FakeDirectInput(base())
+    monkeypatch.setattr(dinput_real, "shared", lambda: di)
+    assert cli_dinput_devices.real_dinput_api() is di
+
+
+def test_an_unloadable_adapter_is_a_device_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def broken() -> FakeDirectInput:
+        raise DInputError("DirectInput8Create failed: 0x80040154")
+
+    monkeypatch.setattr(dinput_real, "shared", broken)
+    with pytest.raises(CliError, match="DirectInput 8 is unavailable") as caught:
         cli_dinput_devices.real_dinput_api()
+    assert caught.value.code == EXIT_DEVICE

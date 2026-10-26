@@ -19,10 +19,12 @@ from wardogs_flight_eng.cli_devices import (
     list_devices_command,
     report_primitives,
 )
+from wardogs_flight_eng.inputs import dinput_real
 from wardogs_flight_eng.inputs.dinput_api import (
     DIJOFS_BY_INDEX,
     DiAxisInfo,
     DiDeviceInfo,
+    DInputError,
     DirectInputApi,
 )
 from wardogs_flight_eng.inputs.dinput_device import DInputJoystick, open_dinput_instance
@@ -40,8 +42,11 @@ _DIJOFS_NAMES = ("X", "Y", "Z", "RX", "RY", "RZ", "SLIDER(0)", "SLIDER(1)")
 
 
 def real_dinput_api() -> DirectInputApi:
-    """The ctypes DirectInput 8 adapter (``inputs.dinput_real``)."""
-    raise CliError("the DirectInput adapter is not available in this build")
+    """The ctypes DirectInput 8 adapter (``inputs.dinput_real``), built lazily."""
+    try:
+        return dinput_real.shared()
+    except DInputError as err:
+        raise CliError(f"DirectInput 8 is unavailable: {err}", EXIT_DEVICE) from err
 
 
 def require_backend(kind: BackendKind) -> None:

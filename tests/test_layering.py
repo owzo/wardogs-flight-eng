@@ -1,4 +1,8 @@
-"""Guard the pure packages: engine and constants must not import impure code."""
+"""Guard the pure packages and confine ``ctypes`` to the native adapters.
+
+``engine`` and ``constants`` must not import impure code; ``ctypes`` is
+imported only by the SDL adapter and the DirectInput adapter modules.
+"""
 
 import ast
 from pathlib import Path
@@ -24,12 +28,18 @@ CLI_MODULES = {
     )
 }
 
+DINPUT_NATIVE = {
+    "wardogs_flight_eng.inputs.dinput_real",
+    "wardogs_flight_eng.inputs.dinput_structs",
+}
+
 FORBIDDEN = {
     "engine": {
         "wardogs_flight_eng.inputs",
         "wardogs_flight_eng.outputs",
         "wardogs_flight_eng.runtime",
         *CLI_MODULES,
+        *DINPUT_NATIVE,
         "sdl2",
     },
     "constants": {
@@ -38,8 +48,27 @@ FORBIDDEN = {
         "wardogs_flight_eng.outputs",
         "wardogs_flight_eng.runtime",
         *CLI_MODULES,
+        *DINPUT_NATIVE,
         "sdl2",
     },
+}
+
+# The modules allowed to import ctypes: the SDL adapter, and the DirectInput
+# adapter (``dinput_real`` and ``dinput_structs``, split under the 200-line
+# limit into the COM plumbing, the built structs and one module per COM
+# interface). Every other module, ``dinput_guids`` included, stays ctypes-free.
+CTYPES_MODULES = {
+    f"inputs/{name}.py"
+    for name in (
+        "sdl_real",
+        "dinput_real",
+        "dinput_real_root",
+        "dinput_real_device",
+        "dinput_real_effects",
+        "dinput_com",
+        "dinput_structs",
+        "dinput_format",
+    )
 }
 
 
@@ -108,3 +137,24 @@ def test_constants_forbids_runtime_and_cli() -> None:
         m for m in _absolute_imports(source) if _violates(m, FORBIDDEN["constants"])
     }
     assert found == {"wardogs_flight_eng.runtime", "wardogs_flight_eng.cli"}
+
+
+def test_ctypes_is_confined_to_the_native_adapters() -> None:
+    importers = {
+        path.relative_to(PACKAGE_ROOT).as_posix()
+        for path in sorted(PACKAGE_ROOT.rglob("*.py"))
+        if _violates_any(_absolute_imports(path.read_text(encoding="utf-8")))
+    }
+    assert importers <= CTYPES_MODULES, sorted(importers - CTYPES_MODULES)
+    assert {"inputs/sdl_real.py", "inputs/dinput_structs.py"} <= importers
+
+
+def _violates_any(imports: set[str]) -> bool:
+    return any(_violates(module, {"ctypes"}) for module in imports)
+
+
+def test_ctypes_detector_sees_every_import_form() -> None:
+    sources = ("import ctypes", "from ctypes import c_int", "import ctypes.util")
+    for source in sources:
+        assert _violates_any(_absolute_imports(source))
+    assert not _violates_any(_absolute_imports("import ctypeslib"))
