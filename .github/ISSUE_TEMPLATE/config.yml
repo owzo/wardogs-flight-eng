@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security or safety concern
+    url: https://github.com/owzo/wardogs-flight-eng/security/advisories/new
+    about: A force that does not release, anything that reads the game, or a crafted file that runs code. Reported privately to the maintainer.
+  - name: Wiki
+    url: https://github.com/owzo/wardogs-flight-eng/wiki
+    about: Getting started, feel modes, force backends, the hardware tuning pass and the design specs.

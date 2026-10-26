@@ -1,0 +1,40 @@
+name: Feature request
+description: Something the program should do that it does not.
+title: "feature: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before writing: the project will never read the game (process, memory, screen, files, network or telemetry) and will never ship game asset contents, keys or mappings. Requests that need either are closed without discussion. Collective and yaw force feedback, a GUI and non-Windows force output are not planned; a request for one of those should say what changed.
+  - type: textarea
+    id: moment
+    attributes:
+      label: The moment you wished this existed
+      description: Describe what you were doing in the cockpit or at the terminal and what you wanted to happen. A concrete moment beats a feature name.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like it to do
+    validations:
+      required: true
+  - type: textarea
+    id: real_thing
+    attributes:
+      label: What the real aircraft or real system does
+      description: If the request copies real helicopter behaviour, name the source (FAA handbook, ADS-33, a manual). The project takes shapes and ratios from such sources, never numbers.
+  - type: dropdown
+    id: inputs
+    attributes:
+      label: What inputs would it need?
+      options:
+        - Only the user's own controls (stick, collective, pedals, buttons)
+        - Something else (explain below; this will probably be declined)
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do today instead

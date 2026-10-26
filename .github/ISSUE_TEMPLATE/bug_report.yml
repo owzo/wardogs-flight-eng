@@ -1,0 +1,74 @@
+name: Bug report
+description: Something the program did that it should not have, or did not do that it should have.
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If this could hurt a user or expose data (a force that does not release, anything that reads the game, a crafted file that runs code), do **not** file it here: use **Security → Report a vulnerability** as described in SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The release tag, or the commit if you run from a checkout.
+      placeholder: v0.3.0
+    validations:
+      required: true
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Force backend
+      options:
+        - sdl (default)
+        - dinput8
+        - none (dry-run, record, calibrate, make-preset)
+    validations:
+      required: true
+  - type: input
+    id: command
+    attributes:
+      label: Exact command
+      placeholder: wardogs-flight-eng run --profile my-littlebird.json --verbose
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: Include the final `stopped:` line and the exit code if the program exited.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: Paste the relevant part of `%LOCALAPPDATA%\WardogsFlightEng\logs\wardogs-flight-eng.log` (run with `--verbose` after the subcommand if you can reproduce it). It is rendered as code automatically.
+      render: text
+  - type: textarea
+    id: profile
+    attributes:
+      label: Profile or scenario
+      description: The smallest profile, scenario or recording that shows the problem, with `device_map` guids left in. Never paste game assets, keys or mappings.
+      render: json
+  - type: input
+    id: hardware
+    attributes:
+      label: Hardware
+      description: Base, collective and pedals, and whether Moza Cockpit was running and on which preset.
+      placeholder: Moza AB9 + AB9 collective + Moza pedals; Cockpit on a plain DirectInput preset (division A)
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched the existing issues.
+          required: true
+        - label: This report contains no game asset contents, keys or mappings.
+          required: true

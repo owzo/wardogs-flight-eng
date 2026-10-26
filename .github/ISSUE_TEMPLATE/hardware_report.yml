@@ -1,0 +1,81 @@
+name: Hardware test report
+description: Results from running the measured conformance tests or the tuning pass on a real base. The most useful issue you can open.
+title: "hardware: "
+labels: ["hardware-report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. Nobody has yet reported a force played on a real base, so every one of these moves the project. Follow the wiki's **Hardware tuning pass** in order, with a hand near the stick, and send whatever you got to, even if a step failed.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: v0.3.0
+    validations:
+      required: true
+  - type: input
+    id: hardware
+    attributes:
+      label: Base, firmware and companion software
+      placeholder: Moza AB9, firmware x.y, Moza Cockpit a.b on a plain DirectInput preset (division A)
+    validations:
+      required: true
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Backend tested
+      options:
+        - sdl
+        - dinput8
+        - both
+    validations:
+      required: true
+  - type: textarea
+    id: check_device
+    attributes:
+      label: check-device output
+      description: Paste the full output, including the primitive table and the verdict. For dinput8, include the matched instance and axis table.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: measured
+    attributes:
+      label: Measured conformance test output
+      description: "`WFE_HARDWARE=1 uv run pytest tests/test_sdl_hardware.py -v --log-cli-level=INFO` and/or the dinput8 test with `WFE_BACKEND=dinput8`. Include the two `measured ... Hz (expected ... Hz)` lines: the magnitude ramp is the decisive check for the sine-clock question (spec ruling 8)."
+      render: text
+  - type: dropdown
+    id: axis_numbering
+    attributes:
+      label: Under dinput8, did the axis and button numbers match SDL's?
+      options:
+        - not tested
+        - "yes, identical"
+        - "no (describe below)"
+  - type: textarea
+    id: steps
+    attributes:
+      label: Tuning-pass steps 4 to 7
+      description: "Fly, unplug test (expected `stopped: device_lost`, exit 2, no residual force), clamp hold over 10 s, release settle. Say which you did and what the stick did."
+  - type: textarea
+    id: values
+    attributes:
+      label: Feel values that worked
+      description: The `feel`, `rotor` and `safety` values you ended with, and the Moza Cockpit preset values alongside them. These are your taste, and that is exactly what is wanted.
+      render: json
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: The relevant part of `%LOCALAPPDATA%\WardogsFlightEng\logs\wardogs-flight-eng.log`.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: Moza Cockpit and Flight Eng were not both driving the spring during the test.
+          required: true
+        - label: This report contains no game asset contents, keys or mappings.
+          required: true
